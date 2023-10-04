@@ -24,7 +24,11 @@
 
 #include "drivers/accgyro/bmi270.h"
 
-
+uint8_t txBuf[16];
+uint8_t rxBuf[16];
+int16_t accADCRaw[3];
+int16_t gyroADCRaw[3];
+uint16_t acc_1G;
 
 #ifdef USE_ACCGYRO_BMI270
 
@@ -175,17 +179,7 @@ static void bmi270UploadConfig(uint8_t dev)
 
 static uint8_t getBmiOsrMode()
 {
-    switch(gyroConfig.gyro_hardware_lpf) {
-        case GYRO_HARDWARE_LPF_NORMAL:
-            return BMI270_VAL_GYRO_CONF_BWP_OSR4;
-        case GYRO_HARDWARE_LPF_OPTION_1:
-            return BMI270_VAL_GYRO_CONF_BWP_OSR2;
-        case GYRO_HARDWARE_LPF_OPTION_2:
-            return BMI270_VAL_GYRO_CONF_BWP_NORM;
-//        case GYRO_HARDWARE_LPF_EXPERIMENTAL:
-//            return BMI270_VAL_GYRO_CONF_BWP_NORM;
-    }
-    return 0;
+	return BMI270_VAL_GYRO_CONF_BWP_OSR4;
 }
 
 void bmi270Config()
@@ -251,21 +245,11 @@ void bmi270Config()
 	}
 }
 
-static void bmi270SpiAccInit(accDev_t *acc)
+static void bmi270SpiAccInit(void)
 {
     // sensor is configured during gyro init
-    acc->acc_1G = 512 * 4;   // 16G sensor scale
+    acc_1G = 512 * 4;   // 16G sensor scale
 }
-
-bool bmi270SpiAccDetect(accDev_t *acc)
-{
-
-    acc->initFn = bmi270SpiAccInit;
-    acc->readFn = bmi270SpiAccRead;
-
-    return true;
-}
-
 
 bool bmi270_Init(void)
 {
@@ -277,9 +261,9 @@ bool bmi270_Init(void)
     while (millis() < 100);
     delay(35);
 
-    gyroInit();
+    //gyroInit();
 
-    accInit(gyro.accSampleRateHz);
+    //accInit(gyro.accSampleRateHz);
     
     #ifdef _USE_HW_CLI
         cliAdd("bmi270", cliBmi270);
@@ -308,144 +292,50 @@ bool bmi270Detect(uint8_t ch)
 void bmi270Intcallback(void)
 {
 	static uint32_t pre_time = 0;
-    gyroDev_t *gyro_temp = gyro.rawSensorDev;
-    gyro_temp->rx_callback_dt = micros() - pre_time;
-    int32_t gyroDmaDuration = cmpTimeCycles(getCycleCounter(), gyro_temp->gyroLastEXTI);
-
-    if (gyroDmaDuration > gyro_temp->gyroDmaMaxDuration) {
-    	gyro_temp->gyroDmaMaxDuration = gyroDmaDuration;
-    }
+	static uint32_t rx_callback_dt = 0;
+	rx_callback_dt = micros() - pre_time;
     pre_time = micros();
-    gyro_temp->dataReady = true;
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	static uint32_t pre_time = 0;
+	static uint32_t exit_callback_dt = 0;
     if(GPIO_Pin==GPIO_PIN_4)
     {
-        //gyro.rawSensorDev->dataReady = true;
-        //gyro_instace->imuDev.InterruptStatus = bmi270InterruptStatus(gyro_instace);
-        gyroDev_t *gyro_temp = &gyro.gyroSensor1.gyroDev;
-        gyro_temp->exit_callback_dt = micros() - pre_time;
-        pre_time = micros();
-        // Ideally we'd use a timer to capture such information, but unfortunately the port used for EXTI interrupt does
-        // not have an associated timer
-        uint32_t nowCycles = getCycleCounter();
-        gyro_temp->gyroSyncEXTI = gyro_temp->gyroLastEXTI + gyro_temp->gyroDmaMaxDuration;
-        gyro_temp->gyroLastEXTI = nowCycles;
-
-        if (gyro_temp->gyroModeSPI == GYRO_EXTI_INT_DMA) {
-        	//SPI_ByteReadWrite_DMA(dev, gyro_temp->txBuf, gyro_temp->rxBuf, 14);
-        	spiReadWriteBuf(dev, gyro_temp->txBuf, gyro_temp->rxBuf, 14);
-            //spiSequence(&gyro_temp->dev, gyro_temp->segments);
-        }
-        gyro_temp->detectedEXTI++;
+		exit_callback_dt = micros() - pre_time;
+		pre_time = micros();
+		//SPI_ByteReadWrite_DMA(dev, gyro_temp->txBuf, gyro_temp->rxBuf, 14);
+		spiReadWriteBuf(dev, txBuf, rxBuf, 14);
     }
-
 }
 
-bool bmi270SpiAccRead(accDev_t *acc)
+bool bmi270SpiAccRead(void)
 {
+	// If read was triggered in interrupt don't bother waiting. The worst that could happen is that we pick
+	// up an old value.
 
-  switch (acc->gyro->gyroModeSPI) {
-  case GYRO_EXTI_INT:
-  case GYRO_EXTI_NO_INT:
-  {
-      acc->gyro->txBuf[0] = BMI270_REG_ACC_DATA_X_LSB | 0x80;
-
-      spiReadWriteBuf(dev, acc->gyro->txBuf, acc->gyro->rxBuf, 8);
-
-      // Fall through
-      FALLTHROUGH;
-  }
-
-  case GYRO_EXTI_INT_DMA:
-  {
-      // If read was triggered in interrupt don't bother waiting. The worst that could happen is that we pick
-      // up an old value.
-
-      // This data was read from the gyro, which is the same SPI device as the acc
-      uint16_t *accData = (uint16_t *)(acc->gyro->rxBuf+1);
-      acc->ADCRaw[X] = accData[0];
-      acc->ADCRaw[Y] = accData[1];
-      acc->ADCRaw[Z] = accData[2];
-
-      //acc->ADCRaw[X] = (int16_t)((uint16_t)acc->gyro->rxBuf[2]<<8 | (uint16_t)acc->gyro->rxBuf[1]);
-      //acc->ADCRaw[Y] = (int16_t)((uint16_t)acc->gyro->rxBuf[4]<<8 | (uint16_t)acc->gyro->rxBuf[3]);
-      //acc->ADCRaw[Z] = (int16_t)((uint16_t)acc->gyro->rxBuf[6]<<8 | (uint16_t)acc->gyro->rxBuf[5]);
-      break;
-  }
-
-  case GYRO_EXTI_INIT:
-  default:
-      break;
-  }
-
+	// This data was read from the gyro, which is the same SPI device as the acc
+	uint16_t *mpuData = (uint16_t *)(rxBuf+1);
+	accADCRaw[X] = mpuData[0];
+	accADCRaw[Y] = mpuData[1];
+	accADCRaw[Z] = mpuData[2];
   return true;
 }
 
-static bool bmi270GyroReadRegister(gyroDev_t *gyro)
+static bool bmi270GyroReadRegister(void)
 {
-    uint16_t *gyroData = (uint16_t *)(gyro->rxBuf+1);
-    switch (gyro->gyroModeSPI) {
-    case GYRO_EXTI_INIT:
-    {
-        // Initialise the tx buffer to all 0x00
-        memset(gyro->txBuf, 0x00, 14);
+    uint16_t *mpuData = (uint16_t *)(rxBuf+1);
+	// Initialise the tx buffer to all 0x00
+	memset(txBuf, 0x00, 16);
+	// Using DMA for gyro access upsets the scheduler on the F4
+	txBuf[0] = BMI270_REG_ACC_DATA_X_LSB | 0x80;
 
-        // Check that minimum number of interrupts have been detected
-
-        // We need some offset from the gyro interrupts to ensure sampling after the interrupt
-        gyro->gyroDmaMaxDuration = 5;
-        // Using DMA for gyro access upsets the scheduler on the F4
-        if (gyro->detectedEXTI > GYRO_EXTI_DETECT_THRESHOLD) {
-            if (true) {
-                gyro->txBuf[0] = BMI270_REG_ACC_DATA_X_LSB | 0x80;
-                gyro->gyroModeSPI = GYRO_EXTI_INT_DMA;
-            } else {
-                // Interrupts are present, but no DMA
-                gyro->gyroModeSPI = GYRO_EXTI_INT;
-            }
-        } else
-        {
-            gyro->gyroModeSPI = GYRO_EXTI_NO_INT;
-        }
-        break;
-    }
-
-    case GYRO_EXTI_INT:
-    case GYRO_EXTI_NO_INT:
-    {
-        gyro->txBuf[0] = BMI270_REG_GYR_DATA_X_LSB | 0x80;
-
-        spiReadWriteBuf(dev, gyro->txBuf, gyro->rxBuf, 8);
-
-
-        gyro->gyroADCRaw[X] = gyroData[0];
-        gyro->gyroADCRaw[Y] = gyroData[1];
-        gyro->gyroADCRaw[Z] = gyroData[2];
-
-        //gyro->gyroADCRaw[X] = (int16_t)((uint16_t)gyro->rxBuf[2]<<8 | (uint16_t)gyro->rxBuf[1]);
-        //gyro->gyroADCRaw[Y] = (int16_t)((uint16_t)gyro->rxBuf[4]<<8 | (uint16_t)gyro->rxBuf[3]);
-        //gyro->gyroADCRaw[Z] = (int16_t)((uint16_t)gyro->rxBuf[6]<<8 | (uint16_t)gyro->rxBuf[5]);
-
-        break;
-    }
-
-    case GYRO_EXTI_INT_DMA:
-    {
-        // If read was triggered in interrupt don't bother waiting. The worst that could happen is that we pick
-        // up an old value.
-        gyro->gyroADCRaw[X] = gyroData[3];
-        gyro->gyroADCRaw[Y] = gyroData[4];
-        gyro->gyroADCRaw[Z] = gyroData[5];
-        break;
-    }
-
-    default:
-        break;
-    }
+	// If read was triggered in interrupt don't bother waiting. The worst that could happen is that we pick
+	// up an old value.
+	gyroADCRaw[X] = mpuData[3];
+	gyroADCRaw[Y] = mpuData[4];
+	gyroADCRaw[Z] = mpuData[5];
 
     return true;
 }
@@ -513,7 +403,7 @@ static bool bmi270GyroReadFifo(gyroDev_t *gyro)
 }
 #endif
 
-bool bmi270SpiGyroRead(gyroDev_t *gyro)
+bool bmi270SpiGyroRead(void)
 {
 
 #ifdef USE_GYRO_DLPF_EXPERIMENTAL
@@ -524,30 +414,14 @@ bool bmi270SpiGyroRead(gyroDev_t *gyro)
 #endif
     {
         // running in 3.2KHz register mode
-        return bmi270GyroReadRegister(gyro);
+        return bmi270GyroReadRegister();
     }
 }
 
-static void bmi270SpiGyroInit(gyroDev_t *gyro)
+static void bmi270SpiGyroInit(void)
 {
-    //extDevice_t *dev = &gyro->dev;
-	UNUSED(gyro);
-
     bmi270Config();
-
-    //uint16_t spiDivider = spiCalculateDivider(BMI270_MAX_SPI_CLK_HZ);
-    //spiSetClkDivisor(dev, spiDivider);
 }
-
-bool bmi270SpiGyroDetect(gyroDev_t *gyro)
-{
-    gyro->initFn = bmi270SpiGyroInit;
-    gyro->readFn = bmi270SpiGyroRead;
-    gyro->scale = GYRO_SCALE_2000DPS;
-
-    return true;
-}
-
 
 static void (*frameCallBack)(void) = NULL;
 
@@ -556,9 +430,9 @@ void bmi270SetCallBack(void (*p_func)(void))
   frameCallBack = p_func;
 }
 
-uint8_t bmi270InterruptStatus(gyroDev_t *gyro)
+uint8_t bmi270InterruptStatus(void)
 {
-    return bmi270RegisterRead(gyro->gyro_bus_ch, BMI270_REG_INT_STATUS_1);;
+    return bmi270RegisterRead(dev, BMI270_REG_INT_STATUS_1);
 }
 
 #ifdef _USE_HW_CLI

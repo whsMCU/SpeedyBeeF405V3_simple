@@ -22,8 +22,6 @@
 #include <string.h>
 #include <math.h>
 
-#include "build/build_config.h"
-
 #include "common/maths.h"
 #include "common/typeconversion.h"
 

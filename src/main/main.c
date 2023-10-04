@@ -77,7 +77,6 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
-  cycleCounterInit();
 
   /* USER CODE BEGIN SysInit */
   hwInit();
