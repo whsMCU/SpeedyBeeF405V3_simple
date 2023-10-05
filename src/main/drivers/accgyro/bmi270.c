@@ -24,13 +24,11 @@
 
 #include "drivers/accgyro/bmi270.h"
 
-uint8_t txBuf[16];
-uint8_t rxBuf[16];
-int16_t accADCRaw[3];
-int16_t gyroADCRaw[3];
-uint16_t acc_1G;
+mpu_t mpu;
 
 #ifdef USE_ACCGYRO_BMI270
+
+#define CALIBRATING_ACC_CYCLES              400
 
 // 10 MHz max SPI frequency
 #define BMI270_MAX_SPI_CLK_HZ 10000000
@@ -39,8 +37,26 @@ uint16_t acc_1G;
 
 #define BMI270_CONFIG_SIZE 328
 
-// Declaration for the device config (microcode) that must be uploaded to the sensor
-extern const uint8_t bmi270_maximum_fifo_config_file[BMI270_CONFIG_SIZE];
+const uint8_t bmi270_maximum_fifo_config_file[BMI270_CONFIG_SIZE] = {
+    0xc8, 0x2e, 0x00, 0x2e, 0x80, 0x2e, 0x1a, 0x00, 0xc8, 0x2e, 0x00, 0x2e, 0xc8, 0x2e, 0x00, 0x2e, 0xc8, 0x2e, 0x00,
+    0x2e, 0xc8, 0x2e, 0x00, 0x2e, 0xc8, 0x2e, 0x00, 0x2e, 0xc8, 0x2e, 0x00, 0x2e, 0x90, 0x32, 0x21, 0x2e, 0x59, 0xf5,
+    0x10, 0x30, 0x21, 0x2e, 0x6a, 0xf5, 0x1a, 0x24, 0x22, 0x00, 0x80, 0x2e, 0x3b, 0x00, 0xc8, 0x2e, 0x44, 0x47, 0x22,
+    0x00, 0x37, 0x00, 0xa4, 0x00, 0xff, 0x0f, 0xd1, 0x00, 0x07, 0xad, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1,
+    0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00,
+    0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x80, 0x2e, 0x00, 0xc1, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x11, 0x24, 0xfc, 0xf5, 0x80, 0x30, 0x40, 0x42, 0x50, 0x50, 0x00, 0x30, 0x12, 0x24, 0xeb,
+    0x00, 0x03, 0x30, 0x00, 0x2e, 0xc1, 0x86, 0x5a, 0x0e, 0xfb, 0x2f, 0x21, 0x2e, 0xfc, 0xf5, 0x13, 0x24, 0x63, 0xf5,
+    0xe0, 0x3c, 0x48, 0x00, 0x22, 0x30, 0xf7, 0x80, 0xc2, 0x42, 0xe1, 0x7f, 0x3a, 0x25, 0xfc, 0x86, 0xf0, 0x7f, 0x41,
+    0x33, 0x98, 0x2e, 0xc2, 0xc4, 0xd6, 0x6f, 0xf1, 0x30, 0xf1, 0x08, 0xc4, 0x6f, 0x11, 0x24, 0xff, 0x03, 0x12, 0x24,
+    0x00, 0xfc, 0x61, 0x09, 0xa2, 0x08, 0x36, 0xbe, 0x2a, 0xb9, 0x13, 0x24, 0x38, 0x00, 0x64, 0xbb, 0xd1, 0xbe, 0x94,
+    0x0a, 0x71, 0x08, 0xd5, 0x42, 0x21, 0xbd, 0x91, 0xbc, 0xd2, 0x42, 0xc1, 0x42, 0x00, 0xb2, 0xfe, 0x82, 0x05, 0x2f,
+    0x50, 0x30, 0x21, 0x2e, 0x21, 0xf2, 0x00, 0x2e, 0x00, 0x2e, 0xd0, 0x2e, 0xf0, 0x6f, 0x02, 0x30, 0x02, 0x42, 0x20,
+    0x26, 0xe0, 0x6f, 0x02, 0x31, 0x03, 0x40, 0x9a, 0x0a, 0x02, 0x42, 0xf0, 0x37, 0x05, 0x2e, 0x5e, 0xf7, 0x10, 0x08,
+    0x12, 0x24, 0x1e, 0xf2, 0x80, 0x42, 0x83, 0x84, 0xf1, 0x7f, 0x0a, 0x25, 0x13, 0x30, 0x83, 0x42, 0x3b, 0x82, 0xf0,
+    0x6f, 0x00, 0x2e, 0x00, 0x2e, 0xd0, 0x2e, 0x12, 0x40, 0x52, 0x42, 0x00, 0x2e, 0x12, 0x40, 0x52, 0x42, 0x3e, 0x84,
+    0x00, 0x40, 0x40, 0x42, 0x7e, 0x82, 0xe1, 0x7f, 0xf2, 0x7f, 0x98, 0x2e, 0x6a, 0xd6, 0x21, 0x30, 0x23, 0x2e, 0x61,
+    0xf5, 0xeb, 0x2c, 0xe1, 0x6f
+};
 
 #define BMI270_CHIP_ID 0x24
 
@@ -129,6 +145,10 @@ static uint8_t dev = BMI270;
 
 static uint8_t _buffer[16] = {0, };
 
+#define GYRO_BUF_SIZE 32
+
+static uint8_t gyroBuf[GYRO_BUF_SIZE];
+
 // BMI270 register reads are 16bits with the first byte a "dummy" value 0
 // that must be ignored. The result is in the second byte.
 static uint8_t bmi270RegisterRead(uint8_t dev, bmi270Register_e registerId)
@@ -179,7 +199,17 @@ static void bmi270UploadConfig(uint8_t dev)
 
 static uint8_t getBmiOsrMode()
 {
-	return BMI270_VAL_GYRO_CONF_BWP_OSR4;
+    switch(mpu.gyro.hardware_lpf) {
+        case GYRO_HARDWARE_LPF_NORMAL:
+            return BMI270_VAL_GYRO_CONF_BWP_OSR4;
+        case GYRO_HARDWARE_LPF_OPTION_1:
+            return BMI270_VAL_GYRO_CONF_BWP_OSR2;
+        case GYRO_HARDWARE_LPF_OPTION_2:
+            return BMI270_VAL_GYRO_CONF_BWP_NORM;
+//        case GYRO_HARDWARE_LPF_EXPERIMENTAL:
+//            return BMI270_VAL_GYRO_CONF_BWP_NORM;
+    }
+    return 0;
 }
 
 void bmi270Config()
@@ -245,12 +275,6 @@ void bmi270Config()
 	}
 }
 
-static void bmi270SpiAccInit(void)
-{
-    // sensor is configured during gyro init
-    acc_1G = 512 * 4;   // 16G sensor scale
-}
-
 bool bmi270_Init(void)
 {
     bool ret = true;
@@ -261,10 +285,41 @@ bool bmi270_Init(void)
     while (millis() < 100);
     delay(35);
 
-    //gyroInit();
+	for(int i = 0; i < 5; i++)
+	{
+		if (bmi270Detect(_DEF_SPI1))
+		{
+			//bmi270Config();
 
-    //accInit(gyro.accSampleRateHz);
-    
+			break;
+		}
+		delay(100);
+	}
+
+    // SPI DMA buffer required per device
+    mpu.txBuf = gyroBuf;
+    mpu.rxBuf = &gyroBuf[GYRO_BUF_SIZE / 2];
+    mpu.gyro.gyro_high_fsr = false;
+
+    mpu.gyro.hardware_lpf = GYRO_HARDWARE_LPF_NORMAL;
+
+	mpu.gyro.gyroSampleRateHz = 3200;
+	mpu.acc.sampleRateHz = 800;
+
+    bmi270Config();
+
+	//gyro.scale = gyro.gyroSensor1.gyroDev.scale;
+
+	mpu.acc.acc_high_fsr = false;
+
+	mpu.acc.accCal.trim.values.roll = 29;
+	mpu.acc.accCal.trim.values.pitch = -35;
+	mpu.acc.accCal.trim.values.yaw = -9;
+
+    mpu.acc.acc_1G = 512 * 4;   // 16G sensor scale
+    mpu.acc.acc_1G_rec = 1.0f / mpu.acc.acc_1G;
+
+
     #ifdef _USE_HW_CLI
         cliAdd("bmi270", cliBmi270);
     #endif
@@ -306,7 +361,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		exit_callback_dt = micros() - pre_time;
 		pre_time = micros();
 		//SPI_ByteReadWrite_DMA(dev, gyro_temp->txBuf, gyro_temp->rxBuf, 14);
-		spiReadWriteBuf(dev, txBuf, rxBuf, 14);
+		spiReadWriteBuf(dev, mpu.txBuf, mpu.rxBuf, 14);
     }
 }
 
@@ -316,26 +371,26 @@ bool bmi270SpiAccRead(void)
 	// up an old value.
 
 	// This data was read from the gyro, which is the same SPI device as the acc
-	uint16_t *mpuData = (uint16_t *)(rxBuf+1);
-	accADCRaw[X] = mpuData[0];
-	accADCRaw[Y] = mpuData[1];
-	accADCRaw[Z] = mpuData[2];
+	uint16_t *mpuData = (uint16_t *)(mpu.rxBuf+1);
+	mpu.acc.ADCRaw[X] = mpuData[0];
+	mpu.acc.ADCRaw[Y] = mpuData[1];
+	mpu.acc.ADCRaw[Z] = mpuData[2];
   return true;
 }
 
 static bool bmi270GyroReadRegister(void)
 {
-    uint16_t *mpuData = (uint16_t *)(rxBuf+1);
+    uint16_t *mpuData = (uint16_t *)(mpu.rxBuf+1);
 	// Initialise the tx buffer to all 0x00
-	memset(txBuf, 0x00, 16);
+	memset(mpu.txBuf, 0x00, 16);
 	// Using DMA for gyro access upsets the scheduler on the F4
-	txBuf[0] = BMI270_REG_ACC_DATA_X_LSB | 0x80;
+	mpu.txBuf[0] = BMI270_REG_ACC_DATA_X_LSB | 0x80;
 
 	// If read was triggered in interrupt don't bother waiting. The worst that could happen is that we pick
 	// up an old value.
-	gyroADCRaw[X] = mpuData[3];
-	gyroADCRaw[Y] = mpuData[4];
-	gyroADCRaw[Z] = mpuData[5];
+	mpu.gyro.ADCRaw[X] = mpuData[3];
+	mpu.gyro.ADCRaw[Y] = mpuData[4];
+	mpu.gyro.ADCRaw[Z] = mpuData[5];
 
     return true;
 }
@@ -418,9 +473,29 @@ bool bmi270SpiGyroRead(void)
     }
 }
 
-static void bmi270SpiGyroInit(void)
+void gyroUpdate(void)
 {
-    bmi270Config();
+	bmi270SpiGyroRead();
+	if(mpu.gyro.gyroCal.cyclesRemaining == 0)
+	{
+
+	}
+}
+
+void accUpdate(void)
+{
+	bmi270SpiAccRead();
+	mpu.acc.isAccelUpdatedAtLeastOnce = true;
+    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        mpu.acc.accADC[axis] = mpu.acc.ADCRaw[axis];
+    }
+	if(mpu.acc.accCal.cyclesRemaining == 0)
+	{
+	    mpu.acc.accADC[X] -= mpu.acc.accCal.trim.raw[X];
+	    mpu.acc.accADC[Y] -= mpu.acc.accCal.trim.raw[Y];
+	    mpu.acc.accADC[Z] -= mpu.acc.accCal.trim.raw[Z];
+
+	}
 }
 
 static void (*frameCallBack)(void) = NULL;

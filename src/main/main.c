@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "bmi270.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +54,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void hwInit(void);
+void init(void);
 /* USER CODE END 0 */
 
 /**
@@ -89,11 +90,28 @@ int main(void)
 
   /* USER CODE END 2 */
 
+  uint32_t schedule_mpu_gyro = 312;//312us/3.2KHz
+  uint32_t schedule_mpu_gyro_temp = micros();
+
+  uint32_t schedule_mpu_acc = 1250;//1250us/800Hz
+  uint32_t schedule_mpu_acc_temp = micros();
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
+	  if(micros()-schedule_mpu_gyro_temp >= schedule_mpu_gyro)
+	  {
+		  schedule_mpu_gyro_temp = micros();
+		  gyroUpdate();
+	  }
+
+	  if(micros()-schedule_mpu_acc_temp >= schedule_mpu_acc)
+	  {
+		  schedule_mpu_acc_temp = micros();
+		  accUpdate();
+	  }
 
     /* USER CODE BEGIN 3 */
   }
@@ -120,6 +138,11 @@ void hwInit(void)
   {
     fatfsInit();
   }
+}
+
+void init(void)
+{
+	bmi270_Init();
 }
 
 /**
