@@ -21,6 +21,7 @@
 #include "hw.h"
 
 #include "common/axis.h"
+#include "common/maths.h"
 
 #include "drivers/accgyro/bmi270.h"
 
@@ -29,6 +30,12 @@ mpu_t mpu;
 #ifdef USE_ACCGYRO_BMI270
 
 #define CALIBRATING_ACC_CYCLES              400
+#define acc_lpf_factor 4
+
+#define gyroMovementCalibrationThreshold    48
+
+#define GYRO_SCALE_2000DPS (2000.0f / (1 << 15))   // 16.384 dps/lsb scalefactor for 2000dps sensors
+#define GYRO_SCALE_4000DPS (4000.0f / (1 << 15))   //  8.192 dps/lsb scalefactor for 4000dps sensors
 
 // 10 MHz max SPI frequency
 #define BMI270_MAX_SPI_CLK_HZ 10000000
@@ -299,12 +306,14 @@ bool bmi270_Init(void)
     // SPI DMA buffer required per device
     mpu.txBuf = gyroBuf;
     mpu.rxBuf = &gyroBuf[GYRO_BUF_SIZE / 2];
+
     mpu.gyro.gyro_high_fsr = false;
-
     mpu.gyro.hardware_lpf = GYRO_HARDWARE_LPF_NORMAL;
-
 	mpu.gyro.gyroSampleRateHz = 3200;
-	mpu.acc.sampleRateHz = 800;
+	mpu.gyro.sampleLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
+	mpu.gyro.targetLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
+	mpu.gyro.calibratingG = 4000;
+	mpu.gyro.scale = GYRO_SCALE_2000DPS;
 
     bmi270Config();
 
@@ -312,10 +321,10 @@ bool bmi270_Init(void)
 
 	mpu.acc.acc_high_fsr = false;
 
-	mpu.acc.accCal.trim.values.roll = 29;
-	mpu.acc.accCal.trim.values.pitch = -35;
-	mpu.acc.accCal.trim.values.yaw = -9;
-
+	mpu.acc.accZero[X] = 29;
+	mpu.acc.accZero[Y] = -35;
+	mpu.acc.accZero[Z] = -9;
+	mpu.acc.sampleRateHz = 800;
     mpu.acc.acc_1G = 512 * 4;   // 16G sensor scale
     mpu.acc.acc_1G_rec = 1.0f / mpu.acc.acc_1G;
 
@@ -395,107 +404,147 @@ static bool bmi270GyroReadRegister(void)
     return true;
 }
 
-#ifdef USE_GYRO_DLPF_EXPERIMENTAL
-static bool bmi270GyroReadFifo(gyroDev_t *gyro)
-{
-    enum {
-        IDX_REG = 0,
-        IDX_SKIP,
-        IDX_FIFO_LENGTH_L,
-        IDX_FIFO_LENGTH_H,
-        IDX_GYRO_XOUT_L,
-        IDX_GYRO_XOUT_H,
-        IDX_GYRO_YOUT_L,
-        IDX_GYRO_YOUT_H,
-        IDX_GYRO_ZOUT_L,
-        IDX_GYRO_ZOUT_H,
-        BUFFER_SIZE,
-    };
-
-    bool dataRead = false;
-    static uint8_t bmi270_tx_buf[BUFFER_SIZE] = {BMI270_REG_FIFO_LENGTH_LSB | 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    static uint8_t bmi270_rx_buf[BUFFER_SIZE];
-
-    // Burst read the FIFO length followed by the next 6 bytes containing the gyro axis data for
-    // the first sample in the queue. It's possible for the FIFO to be empty so we need to check the
-    // length before using the sample.
-    spiReadWriteBuf(gyro->gyro_bus_ch, (uint8_t *)bmi270_tx_buf, bmi270_rx_buf, BUFFER_SIZE);   // receive response
-
-    int fifoLength = (uint16_t)((bmi270_rx_buf[IDX_FIFO_LENGTH_H] << 8) | bmi270_rx_buf[IDX_FIFO_LENGTH_L]);
-
-    if (fifoLength >= BMI270_FIFO_FRAME_SIZE) {
-
-        const int16_t gyroX = (int16_t)((bmi270_rx_buf[IDX_GYRO_XOUT_H] << 8) | bmi270_rx_buf[IDX_GYRO_XOUT_L]);
-        const int16_t gyroY = (int16_t)((bmi270_rx_buf[IDX_GYRO_YOUT_H] << 8) | bmi270_rx_buf[IDX_GYRO_YOUT_L]);
-        const int16_t gyroZ = (int16_t)((bmi270_rx_buf[IDX_GYRO_ZOUT_H] << 8) | bmi270_rx_buf[IDX_GYRO_ZOUT_L]);
-
-        // If the FIFO data is invalid then the returned values will be 0x8000 (-32768) (pg. 43 of datasheet).
-        // This shouldn't happen since we're only using the data if the FIFO length indicates
-        // that data is available, but this safeguard is needed to prevent bad things in
-        // case it does happen.
-        if ((gyroX != INT16_MIN) || (gyroY != INT16_MIN) || (gyroZ != INT16_MIN)) {
-            gyro->gyroADCRaw[X] = gyroX;
-            gyro->gyroADCRaw[Y] = gyroY;
-            gyro->gyroADCRaw[Z] = gyroZ;
-            dataRead = true;
-        }
-        fifoLength -= BMI270_FIFO_FRAME_SIZE;
-    }
-
-    // If there are additional samples in the FIFO then we don't use those for now and simply
-    // flush the FIFO. Under normal circumstances we only expect one sample in the FIFO since
-    // the gyro loop is running at the native sample rate of 6.4KHz.
-    // However the way the FIFO works in the sensor is that if a frame is partially read then
-    // it remains in the queue instead of bein removed. So if we ever got into a state where there
-    // was a partial frame or other unexpected data in the FIFO is may never get cleared and we
-    // would end up in a lock state of always re-reading the same partial or invalid sample.
-    if (fifoLength > 0) {
-        // Partial or additional frames left - flush the FIFO
-    	bmi270RegisterWrite(gyro->gyro_bus_ch, BMI270_REG_CMD, BMI270_VAL_CMD_FIFOFLUSH, 0);
-    }
-
-    return dataRead;
-}
-#endif
-
 bool bmi270SpiGyroRead(void)
 {
+	// running in 3.2KHz register mode
+	return bmi270GyroReadRegister();
+}
 
-#ifdef USE_GYRO_DLPF_EXPERIMENTAL
-    if (gyro->hardware_lpf == GYRO_HARDWARE_LPF_EXPERIMENTAL) {
-        // running in 6.4KHz FIFO mode
-        return bmi270GyroReadFifo(gyro);
-    } else
-#endif
-    {
-        // running in 3.2KHz register mode
-        return bmi270GyroReadRegister();
+void performGyroCalibration(void)
+{
+    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        // Reset g[axis] at start of calibration
+        if (mpu.gyro.calibratingG == 4000) {
+            mpu.gyro.gyroZero[axis] = 0.0f;
+        }
+
+        // Sum up CALIBRATING_GYRO_TIME_US readings
+        mpu.gyro.gyroZero[axis] += mpu.gyro.ADCRaw[axis];
+        devPush(&mpu.gyro.var[axis], mpu.gyro.ADCRaw[axis]);
+
+        if (mpu.gyro.calibratingG == 1) {
+            const float stddev = devStandardDeviation(&mpu.gyro.var[axis]);
+            // DEBUG_GYRO_CALIBRATION records the standard deviation of roll
+            // into the spare field - debug[3], in DEBUG_GYRO_RAW
+
+            // check deviation and startover in case the model was moved
+            if (gyroMovementCalibrationThreshold && stddev > gyroMovementCalibrationThreshold) {
+            	mpu.gyro.calibratingG = 4000;
+                return;
+            }
+
+            // please take care with exotic boardalignment !!
+            mpu.gyro.gyroZero[axis] = mpu.gyro.gyroZero[axis] / 4000;
+//            if (axis == Z) {
+//              mpu.gyro.gyroZero[axis] -= ((float)gyroConfig.gyro_offset_yaw / 100);
+//            }
+        }
     }
+    --mpu.gyro.calibratingG;
 }
 
 void gyroUpdate(void)
 {
 	bmi270SpiGyroRead();
-	if(mpu.gyro.gyroCal.cyclesRemaining == 0)
+	if(mpu.gyro.calibratingG == 0)
 	{
+	    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+	    	mpu.gyro.ADCRaw[axis] -= mpu.gyro.gyroZero[axis];
+	    	mpu.gyro.gyroADC[axis] = mpu.gyro.ADCRaw[axis] * mpu.gyro.scale;
 
+            // integrate using trapezium rule to avoid bias
+            mpu.gyro.accumulatedMeasurements[axis] += 0.5f * (mpu.gyro.gyroPrevious[axis] + mpu.gyro.gyroADC[axis]) * mpu.gyro.targetLooptime;
+            mpu.gyro.gyroPrevious[axis] = mpu.gyro.gyroADCf[axis];
+	    }
+        mpu.gyro.accumulatedMeasurementCount++;
+	}else {
+		performGyroCalibration();
 	}
+}
+
+bool gyroGetAccumulationAverage(float *accumulationAverage)
+{
+    if (mpu.gyro.accumulatedMeasurementCount) {
+        // If we have gyro data accumulated, calculate average rate that will yield the same rotation
+        const uint32_t accumulatedMeasurementTimeUs = mpu.gyro.accumulatedMeasurementCount * mpu.gyro.targetLooptime;
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            accumulationAverage[axis] = mpu.gyro.accumulatedMeasurements[axis] / accumulatedMeasurementTimeUs;
+            mpu.gyro.accumulatedMeasurements[axis] = 0.0f;
+        }
+        mpu.gyro.accumulatedMeasurementCount = 0;
+        return true;
+    } else {
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            accumulationAverage[axis] = 0.0f;
+        }
+        return false;
+    }
 }
 
 void accUpdate(void)
 {
+	static int32_t a[3];
+
 	bmi270SpiAccRead();
 	mpu.acc.isAccelUpdatedAtLeastOnce = true;
-    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-        mpu.acc.accADC[axis] = mpu.acc.ADCRaw[axis];
-    }
-	if(mpu.acc.accCal.cyclesRemaining == 0)
-	{
-	    mpu.acc.accADC[X] -= mpu.acc.accCal.trim.raw[X];
-	    mpu.acc.accADC[Y] -= mpu.acc.accCal.trim.raw[Y];
-	    mpu.acc.accADC[Z] -= mpu.acc.accCal.trim.raw[Z];
 
+	if(mpu.acc.calibratingA>0)
+	{
+		for(int axis=0; axis <XYZ_AXIS_COUNT; axis++)
+		{
+			// Reset a[axis] at start of calibration
+			if (mpu.acc.calibratingA == 512) a[axis] = 0;
+			// Sum up 512 readings
+			a[axis] +=mpu.acc.ADCRaw[axis];
+			// Clear global variables for next reading
+			mpu.acc.ADCRaw[axis] = 0;
+			mpu.acc.accZero[axis] = 0;
+		}
+		// Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
+		if (mpu.acc.calibratingA == 1)
+		{
+			mpu.acc.accZero[X]  = a[X]>>9;
+			mpu.acc.accZero[Y]  = a[Y]>>9;
+			mpu.acc.accZero[Z]  = (a[Z]>>9) - mpu.acc.acc_1G;
+			f.CALIBRATE_ACC = 0;
+		}
+		mpu.acc.calibratingA--;
 	}
+
+	if(mpu.acc.calibratingA == 0)
+	{
+	    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+	    	mpu.acc.ADCRaw[axis] -=  mpu.acc.accZero[axis];
+			if (acc_lpf_factor > 0)
+			{
+				mpu.acc.accADC[axis] = mpu.acc.accADC[axis] * (1.0f - (1.0f / acc_lpf_factor)) + mpu.acc.ADCRaw[axis] * (1.0f / acc_lpf_factor);
+				mpu.acc.accADCf[axis] = mpu.acc.accADC[axis];
+			}
+	    }
+	}
+    ++mpu.acc.accumulatedMeasurementCount;
+    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        mpu.acc.accumulatedMeasurements[axis] += mpu.acc.accADCf[axis];
+    }
+
+}
+
+bool accGetAccumulationAverage(float *accumulationAverage)
+{
+    if (mpu.acc.accumulatedMeasurementCount > 0) {
+        // If we have gyro data accumulated, calculate average rate that will yield the same rotation
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            accumulationAverage[axis] = mpu.acc.accumulatedMeasurements[axis] / mpu.acc.accumulatedMeasurementCount;
+            mpu.acc.accumulatedMeasurements[axis] = 0.0f;
+        }
+        mpu.acc.accumulatedMeasurementCount = 0;
+        return true;
+    } else {
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            accumulationAverage[axis] = 0.0f;
+        }
+        return false;
+    }
 }
 
 static void (*frameCallBack)(void) = NULL;

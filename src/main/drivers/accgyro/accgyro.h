@@ -21,38 +21,23 @@ typedef enum {
     GYRO_HARDWARE_LPF_COUNT
 } gyroHardwareLpf_e;
 
-typedef struct int16_flightDynamicsTrims_s {
-    int16_t roll;
-    int16_t pitch;
-    int16_t yaw;
-    int16_t calibrationCompleted;
-} flightDynamicsTrims_def_t;
-
-typedef union flightDynamicsTrims_u {
-    int16_t raw[4];
-    flightDynamicsTrims_def_t values;
-} flightDynamicsTrims_t;
-
-typedef struct gyroCalibration_s {
-    float sum[XYZ_AXIS_COUNT];
-    stdev_t var[XYZ_AXIS_COUNT];
-    int32_t cyclesRemaining;
-    flightDynamicsTrims_t trim;
-} Calibration_t;
-
 typedef struct gyro_s {
     float scale;
     int16_t ADCRaw[XYZ_AXIS_COUNT];
     float gyroADC[XYZ_AXIS_COUNT];     // aligned, calibrated, scaled, but unfiltered data from the sensor(s)
     float gyroADCf[XYZ_AXIS_COUNT];    // filtered gyro data
-    uint8_t sampleCount;               // gyro sensor sample counter
-    float sampleSum[XYZ_AXIS_COUNT];   // summed samples used for downsampling
-
+    float gyroZero[XYZ_AXIS_COUNT];
+    uint16_t calibratingG;
+    stdev_t var[XYZ_AXIS_COUNT];
+    float accumulatedMeasurements[XYZ_AXIS_COUNT];
+    float gyroPrevious[XYZ_AXIS_COUNT];
+    int accumulatedMeasurementCount;
     volatile bool dataReady;
     bool gyro_high_fsr;
     uint8_t hardware_lpf;
     uint16_t gyroSampleRateHz;
-    Calibration_t gyroCal;
+    uint32_t sampleLooptime;
+	uint32_t targetLooptime;
 } gyro_t;
 
 typedef struct acc_s {
@@ -63,8 +48,12 @@ typedef struct acc_s {
     bool acc_high_fsr;
     uint16_t sampleRateHz;
     float accADC[XYZ_AXIS_COUNT];
+    float accADCf[XYZ_AXIS_COUNT];
+    float accZero[XYZ_AXIS_COUNT];
+    int accumulatedMeasurementCount;
+    float accumulatedMeasurements[XYZ_AXIS_COUNT];
+    uint16_t calibratingA;
     bool isAccelUpdatedAtLeastOnce;
-    Calibration_t accCal;
 } acc_t;
 
 typedef struct mpu_s {

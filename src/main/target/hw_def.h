@@ -81,5 +81,9 @@
 #define CONVERT_PARAMETER_TO_FLOAT(param) (0.001f * param)
 #define CONVERT_PARAMETER_TO_PERCENT(param) (0.01f * param)
 
+#define TASK_PERIOD_HZ(hz) (1000000 / (hz))
+#define TASK_PERIOD_MS(ms) ((ms) * 1000)
+#define TASK_PERIOD_US(us) (us)
+
 
 #endif /* SRC_HW_HW_DEF_H_ */

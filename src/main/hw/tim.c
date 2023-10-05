@@ -5,7 +5,7 @@
  *      Author: WANG
  */
 
-#include <tim.h>
+#include "tim.h"
 
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim5;

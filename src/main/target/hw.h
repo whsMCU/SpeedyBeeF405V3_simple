@@ -8,7 +8,6 @@
 #ifndef SRC_HW_HW_H_
 #define SRC_HW_HW_H_
 
-#include <tim.h>
 #include "hw_def.h"
 #include "def.h"
 #include "bsp.h"

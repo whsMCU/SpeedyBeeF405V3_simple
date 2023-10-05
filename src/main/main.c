@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "bmi270.h"
+#include "accgyro/bmi270.h"
+#include "hw/tim.h"
+#include "flight/imu.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,7 +44,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+flags_t f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -96,6 +98,15 @@ int main(void)
   uint32_t schedule_mpu_acc = 1250;//1250us/800Hz
   uint32_t schedule_mpu_acc_temp = micros();
 
+  uint32_t schedule_imu = TASK_PERIOD_HZ(100);//1250us/800Hz
+  uint32_t schedule_imu_temp = micros();
+
+  uint32_t schedule_led = TASK_PERIOD_HZ(100);//1250us/800Hz
+  uint32_t schedule_led_temp = micros();
+
+  uint32_t schedule_debug = TASK_PERIOD_HZ(50);//1250us/800Hz
+  uint32_t schedule_debug_temp = micros();
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -112,6 +123,35 @@ int main(void)
 		  schedule_mpu_acc_temp = micros();
 		  accUpdate();
 	  }
+
+	  if(micros()-schedule_imu_temp >= schedule_imu)
+	  {
+		  schedule_imu_temp = micros();
+		  imuUpdateAttitude(schedule_imu_temp);
+	  }
+
+	  if(micros()-schedule_led_temp >= schedule_led)
+	  {
+		  schedule_led_temp = micros();
+		  static uint32_t pre_time = 0;
+		  if(schedule_led_temp - pre_time >= 1000000)
+		  {
+			pre_time = schedule_led_temp;
+			  LED0_TOGGLE;
+		  }
+	  }
+
+	  if(micros()-schedule_debug_temp >= schedule_debug)
+	  {
+		  schedule_debug_temp = micros();
+		  //cliPrintf("ACC R: %d, P: %d, Y: %d\n\r", mpu.acc.ADCRaw[X], mpu.acc.ADCRaw[Y], mpu.acc.ADCRaw[Z]);
+		  //cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
+		  cliPrintf("IMU R: %d, P: %d, Y: %d\n\r",    attitude.values.roll,
+													  attitude.values.pitch,
+													  attitude.values.yaw);
+	  }
+
+	  cliMain();
 
     /* USER CODE BEGIN 3 */
   }
@@ -133,6 +173,7 @@ void hwInit(void)
   i2cInit();
   spiInit();
   adcInit();
+  TIM_Init();
 
   if (sdInit() == true)
   {
@@ -142,7 +183,28 @@ void hwInit(void)
 
 void init(void)
 {
+	imuConfig_Init();
+	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
+	LED1_ON;
+	for (int i = 0; i < 10; i++)
+	{
+		LED0_TOGGLE;
+		#if defined(USE_BEEPER)
+		delay(25);
+		if (!(beeperConfig.beeper_off_flags & BEEPER_GET_FLAG(BEEPER_SYSTEM_INIT))) {
+			BEEP_ON;
+		}
+			delay(25);
+			BEEP_OFF;
+		#else
+			delay(50);
+		#endif
+	}
+	LED0_OFF;
+	////////////////////////////////////////
+
+	imuInit();
 }
 
 /**
