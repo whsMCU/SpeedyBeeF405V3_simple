@@ -30,6 +30,8 @@ mpu_t mpu;
 #ifdef USE_ACCGYRO_BMI270
 
 #define CALIBRATING_ACC_CYCLES              400
+#define gyroCalibrationDuration 125
+
 #define acc_lpf_factor 4
 
 #define gyroMovementCalibrationThreshold    48
@@ -282,6 +284,29 @@ void bmi270Config()
 	}
 }
 
+void accInitFilters(void)
+{
+    // Only set the lowpass cutoff if the ACC sample rate is detected otherwise
+    // the filter initialization is not defined (sample rate = 0)
+    mpu.acc.accLpfCutHz = (mpu.acc.sampleRateHz) ? mpu.acc.acc_lpf_hz : 0;
+    if (mpu.acc.accLpfCutHz) {
+        const uint32_t accSampleTimeUs = 1e6 / mpu.acc.sampleRateHz;
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            biquadFilterInitLPF(&mpu.acc.accFilter[axis], mpu.acc.accLpfCutHz, accSampleTimeUs);
+        }
+    }
+}
+
+int32_t gyroCalculateCalibratingCycles(void)
+{
+    return (gyroCalibrationDuration * 10000) / mpu.gyro.sampleLooptime; //gyroCalibrationDuration
+}
+
+void gyroSetCalibrationCycles(void)
+{
+    mpu.gyro.calibratingG = gyroCalculateCalibratingCycles();
+}
+
 bool bmi270_Init(void)
 {
     bool ret = true;
@@ -312,13 +337,13 @@ bool bmi270_Init(void)
 	mpu.gyro.gyroSampleRateHz = 3200;
 	mpu.gyro.sampleLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
 	mpu.gyro.targetLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
-	mpu.gyro.calibratingG = 4000;
+	gyroSetCalibrationCycles();
 	mpu.gyro.scale = GYRO_SCALE_2000DPS;
 
     bmi270Config();
 
 	//gyro.scale = gyro.gyroSensor1.gyroDev.scale;
-
+    mpu.acc.acc_lpf_hz = 10,
 	mpu.acc.acc_high_fsr = false;
 
 	mpu.acc.accZero[X] = 29;
@@ -327,6 +352,8 @@ bool bmi270_Init(void)
 	mpu.acc.sampleRateHz = 800;
     mpu.acc.acc_1G = 512 * 4;   // 16G sensor scale
     mpu.acc.acc_1G_rec = 1.0f / mpu.acc.acc_1G;
+
+    accInitFilters();
 
 
     #ifdef _USE_HW_CLI
@@ -410,11 +437,21 @@ bool bmi270SpiGyroRead(void)
 	return bmi270GyroReadRegister();
 }
 
+static bool isOnFinalGyroCalibrationCycle(void)
+{
+    return mpu.gyro.calibratingG == 1;
+}
+
+static bool isOnFirstGyroCalibrationCycle(void)
+{
+    return mpu.gyro.calibratingG == gyroCalculateCalibratingCycles();
+}
+
 void performGyroCalibration(void)
 {
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         // Reset g[axis] at start of calibration
-        if (mpu.gyro.calibratingG == 4000) {
+        if (isOnFirstGyroCalibrationCycle()) {
             mpu.gyro.gyroZero[axis] = 0.0f;
         }
 
@@ -422,19 +459,19 @@ void performGyroCalibration(void)
         mpu.gyro.gyroZero[axis] += mpu.gyro.ADCRaw[axis];
         devPush(&mpu.gyro.var[axis], mpu.gyro.ADCRaw[axis]);
 
-        if (mpu.gyro.calibratingG == 1) {
+        if (isOnFinalGyroCalibrationCycle()) {
             const float stddev = devStandardDeviation(&mpu.gyro.var[axis]);
             // DEBUG_GYRO_CALIBRATION records the standard deviation of roll
             // into the spare field - debug[3], in DEBUG_GYRO_RAW
 
             // check deviation and startover in case the model was moved
             if (gyroMovementCalibrationThreshold && stddev > gyroMovementCalibrationThreshold) {
-            	mpu.gyro.calibratingG = 4000;
+            	gyroSetCalibrationCycles();
                 return;
             }
 
             // please take care with exotic boardalignment !!
-            mpu.gyro.gyroZero[axis] = mpu.gyro.gyroZero[axis] / 4000;
+            mpu.gyro.gyroZero[axis] = mpu.gyro.gyroZero[axis] / gyroCalculateCalibratingCycles();
 //            if (axis == Z) {
 //              mpu.gyro.gyroZero[axis] -= ((float)gyroConfig.gyro_offset_yaw / 100);
 //            }
@@ -481,47 +518,74 @@ bool gyroGetAccumulationAverage(float *accumulationAverage)
     }
 }
 
+static bool isOnFinalAccelerationCalibrationCycle(void)
+{
+    return mpu.acc.calibratingA == 1;
+}
+
+static bool isOnFirstAccelerationCalibrationCycle(void)
+{
+	return mpu.acc.calibratingA == CALIBRATING_ACC_CYCLES;
+}
+
+void performAcclerationCalibration(void)
+{
+    static int32_t a[3];
+
+    for (int axis = 0; axis < 3; axis++) {
+
+        // Reset a[axis] at start of calibration
+        if (isOnFirstAccelerationCalibrationCycle()) {
+            a[axis] = 0;
+        }
+
+        // Sum up CALIBRATING_ACC_CYCLES readings
+        a[axis] += mpu.acc.accADCf[axis];
+
+        // Reset global variables to prevent other code from using un-calibrated data
+        mpu.acc.accADCf[axis] = 0;
+        mpu.acc.accZero[axis] = 0;
+    }
+
+    if (isOnFinalAccelerationCalibrationCycle()) {
+        // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
+    	mpu.acc.accZero[X] = (a[X] + (CALIBRATING_ACC_CYCLES / 2)) / CALIBRATING_ACC_CYCLES;
+    	mpu.acc.accZero[Y] = (a[Y] + (CALIBRATING_ACC_CYCLES / 2)) / CALIBRATING_ACC_CYCLES;
+    	mpu.acc.accZero[Z] = (a[Z] + (CALIBRATING_ACC_CYCLES / 2)) / CALIBRATING_ACC_CYCLES - mpu.acc.acc_1G;
+
+//        resetRollAndPitchTrims(rollAndPitchTrims);
+//        setConfigCalibrationCompleted();
+
+        //saveConfigAndNotify();
+    }
+
+    mpu.acc.calibratingA--;
+}
+
 void accUpdate(void)
 {
-	static int32_t a[3];
-
 	bmi270SpiAccRead();
 	mpu.acc.isAccelUpdatedAtLeastOnce = true;
 
-	if(mpu.acc.calibratingA>0)
-	{
-		for(int axis=0; axis <XYZ_AXIS_COUNT; axis++)
-		{
-			// Reset a[axis] at start of calibration
-			if (mpu.acc.calibratingA == 512) a[axis] = 0;
-			// Sum up 512 readings
-			a[axis] +=mpu.acc.ADCRaw[axis];
-			// Clear global variables for next reading
-			mpu.acc.ADCRaw[axis] = 0;
-			mpu.acc.accZero[axis] = 0;
-		}
-		// Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
-		if (mpu.acc.calibratingA == 1)
-		{
-			mpu.acc.accZero[X]  = a[X]>>9;
-			mpu.acc.accZero[Y]  = a[Y]>>9;
-			mpu.acc.accZero[Z]  = (a[Z]>>9) - mpu.acc.acc_1G;
-			f.CALIBRATE_ACC = 0;
-		}
-		mpu.acc.calibratingA--;
+	for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+		mpu.acc.accADC[axis] =  mpu.acc.ADCRaw[axis];
 	}
 
-	if(mpu.acc.calibratingA == 0)
-	{
-	    for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-	    	mpu.acc.ADCRaw[axis] -=  mpu.acc.accZero[axis];
-			if (acc_lpf_factor > 0)
-			{
-				mpu.acc.accADC[axis] = mpu.acc.accADC[axis] * (1.0f - (1.0f / acc_lpf_factor)) + mpu.acc.ADCRaw[axis] * (1.0f / acc_lpf_factor);
-				mpu.acc.accADCf[axis] = mpu.acc.accADC[axis];
-			}
-	    }
+	if (mpu.acc.accLpfCutHz) {
+		for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+			mpu.acc.accADCf[axis] = biquadFilterApply(&mpu.acc.accFilter[axis], mpu.acc.accADC[axis]);
+		}
 	}
+
+    if (!mpu.acc.calibratingA == 0) {
+        performAcclerationCalibration();
+    }
+
+	for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+	mpu.acc.accADCf[axis] -=  mpu.acc.accZero[axis];
+	}
+
+
     ++mpu.acc.accumulatedMeasurementCount;
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         mpu.acc.accumulatedMeasurements[axis] += mpu.acc.accADCf[axis];

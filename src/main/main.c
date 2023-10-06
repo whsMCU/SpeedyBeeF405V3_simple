@@ -22,6 +22,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "accgyro/bmi270.h"
+#include "barometer/barometer_dps310.h"
+#include "compass/compass_qmc5883l.h"
+#include "adc/adcinternal.h"
 #include "hw/tim.h"
 #include "flight/imu.h"
 /* USER CODE END Includes */
@@ -101,6 +104,15 @@ int main(void)
   uint32_t schedule_imu = TASK_PERIOD_HZ(100);//1250us/800Hz
   uint32_t schedule_imu_temp = micros();
 
+  uint32_t schedule_adc = TASK_PERIOD_HZ(1);//1250us/800Hz
+  uint32_t schedule_adc_temp = micros();
+
+  uint32_t schedule_baro = TASK_PERIOD_HZ(20);//1250us/800Hz
+  uint32_t schedule_baro_temp = micros();
+
+  uint32_t schedule_mag = TASK_PERIOD_HZ(20);//1250us/800Hz
+  uint32_t schedule_mag_temp = micros();
+
   uint32_t schedule_led = TASK_PERIOD_HZ(100);//1250us/800Hz
   uint32_t schedule_led_temp = micros();
 
@@ -130,6 +142,30 @@ int main(void)
 		  imuUpdateAttitude(schedule_imu_temp);
 	  }
 
+	  if(micros()-schedule_adc_temp >= schedule_adc)
+	  {
+		  schedule_adc_temp = micros();
+		  adcInternalProcess();
+	  }
+
+	  if(micros()-schedule_baro_temp >= schedule_baro)
+	  {
+		  schedule_baro_temp = micros();
+	      const uint32_t newDeadline = baroUpdate(schedule_baro_temp);
+	      if (newDeadline != 0) {
+	    	  schedule_baro_temp += newDeadline;
+	      }
+	  }
+
+	  if(micros()-schedule_mag_temp >= schedule_mag)
+	  {
+		  schedule_mag_temp = micros();
+//	      const uint32_t newDeadline = compassUpdate(schedule_mag_temp);
+//	      if (newDeadline != 0) {
+//	    	  schedule_mag_temp += newDeadline;
+//	      }
+	  }
+
 	  if(micros()-schedule_led_temp >= schedule_led)
 	  {
 		  schedule_led_temp = micros();
@@ -146,9 +182,10 @@ int main(void)
 		  schedule_debug_temp = micros();
 		  //cliPrintf("ACC R: %d, P: %d, Y: %d\n\r", mpu.acc.ADCRaw[X], mpu.acc.ADCRaw[Y], mpu.acc.ADCRaw[Z]);
 		  //cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
-		  cliPrintf("IMU R: %d, P: %d, Y: %d\n\r",    attitude.values.roll,
-													  attitude.values.pitch,
-													  attitude.values.yaw);
+//		  cliPrintf("IMU R: %d, P: %d, Y: %d\n\r",    attitude.values.roll,
+//													  attitude.values.pitch,
+//													  attitude.values.yaw);
+		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
 	  }
 
 	  cliMain();
@@ -186,6 +223,11 @@ void init(void)
 	imuConfig_Init();
 	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
+	dps310_Init();
+#ifdef USE_MAG_QMC5883
+	compassInit();
+#endif
+	adcInternalInit();
 	LED1_ON;
 	for (int i = 0; i < 10; i++)
 	{

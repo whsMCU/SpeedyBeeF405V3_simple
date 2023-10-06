@@ -10,6 +10,7 @@
 
 #include "common/axis.h"
 #include "common/maths.h"
+#include "common/filter.h"
 
 typedef enum {
     GYRO_HARDWARE_LPF_NORMAL,
@@ -20,6 +21,18 @@ typedef enum {
 #endif
     GYRO_HARDWARE_LPF_COUNT
 } gyroHardwareLpf_e;
+
+typedef struct int16_flightDynamicsTrims_s {
+    int16_t roll;
+    int16_t pitch;
+    int16_t yaw;
+    int16_t calibrationCompleted;
+} flightDynamicsTrims_def_t;
+
+typedef union flightDynamicsTrims_u {
+    int16_t raw[4];
+    flightDynamicsTrims_def_t values;
+} flightDynamicsTrims_t;
 
 typedef struct gyro_s {
     float scale;
@@ -41,6 +54,9 @@ typedef struct gyro_s {
 } gyro_t;
 
 typedef struct acc_s {
+	uint16_t acc_lpf_hz;                    // cutoff frequency for the low pass filter used on the acc z-axis for althold in Hz
+    uint16_t accLpfCutHz;
+    biquadFilter_t accFilter[XYZ_AXIS_COUNT];
     float acc_1G_rec;
     uint16_t acc_1G;
     int16_t ADCRaw[XYZ_AXIS_COUNT];
