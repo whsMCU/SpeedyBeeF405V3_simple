@@ -9,6 +9,8 @@
 #include "uart.h"
 #include "ring_buffer.h"
 #include "usbd_cdc_if.h"
+#include "rx/rx.h"
+#include "rx/crsf.h"
 
 static bool is_open[UART_MAX_CH];
 #define MAX_SIZE 128
@@ -60,7 +62,7 @@ bool uartOpen(uint8_t ch, uint32_t baud)
     	huart2.Instance = USART2;
     	huart2.Init.BaudRate = baud;
     	huart2.Init.WordLength = UART_WORDLENGTH_8B;
-      huart2.Init.StopBits = UART_STOPBITS_1;
+        huart2.Init.StopBits = UART_STOPBITS_1;
     	huart2.Init.Parity = UART_PARITY_NONE;
     	huart2.Init.Mode = UART_MODE_TX_RX;
     	huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
@@ -77,15 +79,9 @@ bool uartOpen(uint8_t ch, uint32_t baud)
     	else
     	{
     		ret = true;
-        is_open[ch] = true;
-    	  HAL_UARTEx_ReceiveToIdle_DMA(&huart2, (uint8_t *)&rx_buf[0], MAX_SIZE);
-    	  __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
-//        if(HAL_UART_Receive_DMA(&huart2, (uint8_t *)&rx_buf2[0], MAX_SIZE) != HAL_OK)
-//        {
-//          ret = false;
-//        }
-        //ring_buffer[ch].in  = (ring_buffer[ch].len - hdma_usart2_rx.Instance->NDTR);
-        //ring_buffer[ch].out = ring_buffer[ch].in;
+            is_open[ch] = true;
+    	    HAL_UARTEx_ReceiveToIdle_DMA(&huart2, (uint8_t *)&rx_buf[0], MAX_SIZE);
+    	    __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
     	}
       break;
 
@@ -628,16 +624,24 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-  if(huart->Instance == USART2)
-  {
+	static uint32_t pre_time = 0;
+	static uint32_t pre_time1 = 0;
+    if(huart->Instance == USART2)
+    {
+		rxRuntimeState.callbackTime = micros() - pre_time;
+		pre_time = micros();
+		pre_time1 = micros();
 		qbufferWrite(&ring_buffer[_DEF_UART2], (uint8_t *)&rx_buf2[0], (uint32_t)Size);
-
+		rxRuntimeState.uartAvailable = uartAvailable(_DEF_UART2);
+		rxRuntimeState.rx_count = 0;
 		while(uartAvailable(_DEF_UART2) > 0){
-				//crsfDataReceive(uartRead(_DEF_UART2), (void*) &rxRuntimeState);
+			crsfDataReceive(uartRead(_DEF_UART2), (void*) &rxRuntimeState);
+			rxRuntimeState.rx_count++;
 		}
+		rxRuntimeState.callbackExeTime = micros() - pre_time1;
 		HAL_UARTEx_ReceiveToIdle_DMA(&huart2, (uint8_t *)&rx_buf2[0], MAX_SIZE);
 		__HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
-  }
+    }
 
 }
 

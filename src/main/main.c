@@ -27,6 +27,9 @@
 #include "adc/adcinternal.h"
 #include "hw/tim.h"
 #include "flight/imu.h"
+#include "flight/position.h"
+
+#include "rx/rx.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -101,22 +104,28 @@ int main(void)
   uint32_t schedule_mpu_acc = 1250;//1250us/800Hz
   uint32_t schedule_mpu_acc_temp = micros();
 
-  uint32_t schedule_imu = TASK_PERIOD_HZ(100);//1250us/800Hz
+  uint32_t schedule_imu = TASK_PERIOD_HZ(100);
   uint32_t schedule_imu_temp = micros();
 
-  uint32_t schedule_adc = TASK_PERIOD_HZ(1);//1250us/800Hz
+  uint32_t schedule_adc = TASK_PERIOD_HZ(1);
   uint32_t schedule_adc_temp = micros();
 
-  uint32_t schedule_baro = TASK_PERIOD_HZ(20);//1250us/800Hz
+  uint32_t schedule_baro = TASK_PERIOD_HZ(20);
   uint32_t schedule_baro_temp = micros();
 
-  uint32_t schedule_mag = TASK_PERIOD_HZ(20);//1250us/800Hz
+  uint32_t schedule_altitude = TASK_PERIOD_HZ(40);
+  uint32_t schedule_altitude_temp = micros();
+
+  uint32_t schedule_rx = TASK_PERIOD_HZ(33);
+  uint32_t schedule_rx_temp = micros();
+
+  uint32_t schedule_mag = TASK_PERIOD_HZ(20);
   uint32_t schedule_mag_temp = micros();
 
-  uint32_t schedule_led = TASK_PERIOD_HZ(100);//1250us/800Hz
+  uint32_t schedule_led = TASK_PERIOD_HZ(100);
   uint32_t schedule_led_temp = micros();
 
-  uint32_t schedule_debug = TASK_PERIOD_HZ(50);//1250us/800Hz
+  uint32_t schedule_debug = TASK_PERIOD_HZ(50);
   uint32_t schedule_debug_temp = micros();
 
   /* Infinite loop */
@@ -157,6 +166,19 @@ int main(void)
 	      }
 	  }
 
+	  if(micros()-schedule_altitude_temp >= schedule_altitude)
+	  {
+		  schedule_altitude_temp = micros();
+		  calculateEstimatedAltitude(schedule_altitude_temp);
+	  }
+
+	  if(micros()-schedule_rx_temp >= schedule_rx)
+	  {
+		  schedule_rx_temp = micros();
+		  taskUpdateRxMain(schedule_rx_temp);
+		  //rxUpdateCheck();
+	  }
+
 	  if(micros()-schedule_mag_temp >= schedule_mag)
 	  {
 		  schedule_mag_temp = micros();
@@ -185,9 +207,10 @@ int main(void)
 //		  cliPrintf("IMU R: %d, P: %d, Y: %d\n\r",    attitude.values.roll,
 //													  attitude.values.pitch,
 //													  attitude.values.yaw);
-		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
+//		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
+//		  cliPrintf("rx 1: %.1f, 2: %.1f, 3: %.1f, 4: %.1f, 5: %.1f\n\r", rcRaw[0],rcRaw[1],rcRaw[2],rcRaw[3],rcRaw[4]);
 	  }
-
+	  rxFrameCheck();
 	  cliMain();
 
     /* USER CODE BEGIN 3 */
@@ -221,6 +244,9 @@ void hwInit(void)
 void init(void)
 {
 	imuConfig_Init();
+	rxConfig_Init();
+	rxChannelRangeConfigs_Init();
+	positionConfig_Init();
 	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
 	dps310_Init();
@@ -247,6 +273,8 @@ void init(void)
 	////////////////////////////////////////
 
 	imuInit();
+
+	rxInit();
 }
 
 /**

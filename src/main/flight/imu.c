@@ -593,12 +593,3 @@ void imuQuaternionHeadfreeTransformVectorEarthToBody(t_fp_vector_def *v)
     v->Y = y;
     v->Z = z;
 }
-
-bool isUpright(void)
-{
-#ifdef USE_ACC
-    return !sensors(SENSOR_ACC) || (attitudeIsEstablished && getCosTiltAngle() > smallAngleCosZ);
-#else
-    return true;
-#endif
-}
