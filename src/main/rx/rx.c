@@ -30,7 +30,12 @@
 #include "common/axis.h"
 #include "common/filter.h"
 
+#include "flight/runtime_config.h"
+#include "flight/imu.h"
+#include "flight/stats.h"
+
 #include "rx/rc_controls.h"
+#include "rx/rc_modes.h"
 #include "rx/rx.h"
 #include "rx/crsf.h"
 
@@ -57,9 +62,25 @@ static uint16_t uplinkTxPwrMw = 0;  //Uplink Tx power in mW
 rssiSource_e rssiSource;
 linkQualitySource_e linkQualitySource;
 
+static bool rxDataProcessingRequired = false;
+static bool auxiliaryProcessingRequired = false;
+
 static bool rxSignalReceived = false;
 static bool rxFlightChannelsValid = false;
 static uint8_t rxChannelCount;
+
+static uint32_t needRxSignalBefore = 0;
+static uint32_t suspendRxSignalUntil = 0;
+static uint8_t  skipRxSamples = 0;
+
+#if defined(USE_GPS) || defined(USE_MAG)
+int16_t magHold;
+#endif
+
+uint32_t disarmAt;     // Time of automatic disarm when "Don't spin the motors when armed" is enabled and auto_disarm_delay is nonzero
+int lastArmingDisabledReason = 0;
+uint32_t lastDisarmTimeUs;
+int tryingToArm = ARMING_DELAYED_DISARMED;
 
 float rcRaw[MAX_SUPPORTED_RC_CHANNEL_COUNT];     // last received raw value, as it comes
 float rcData[MAX_SUPPORTED_RC_CHANNEL_COUNT];           // scaled, modified, checked and constrained values
@@ -248,9 +269,186 @@ bool rxAreFlightChannelsValid(void)
 //    return taskUpdateRxMainInProgress() || rxDataProcessingRequired || auxiliaryProcessingRequired;
 //}
 
-void rxFrameCheck(void)
+void disarm(flightLogDisarmReason_e reason)
 {
-	rxRuntimeState.rcFrameStatusFn(&rxRuntimeState);
+	 if (ARMING_FLAG(ARMED)) {
+
+		 ENABLE_ARMING_FLAG(WAS_EVER_ARMED);
+
+		 DISABLE_ARMING_FLAG(ARMED);
+		 lastDisarmTimeUs = micros();
+
+#ifdef USE_OSD
+		 if (IS_RC_MODE_ACTIVE(BOXFLIPOVERAFTERCRASH) || isLaunchControlActive()) {
+				 osdSuppressStats(true);
+		 }
+#endif
+
+#ifdef USE_BLACKBOX
+		 flightLogEvent_disarm_t eventData;
+		 eventData.reason = reason;
+		 blackboxLogEvent(FLIGHT_LOG_EVENT_DISARM, (flightLogEventData_t*)&eventData);
+
+		 if (blackboxConfig()->device && blackboxConfig()->mode != BLACKBOX_MODE_ALWAYS_ON) { // Close the log upon disarm except when logging mode is ALWAYS ON
+				 blackboxFinish();
+		 }
+#else
+		 UNUSED(reason);
+#endif
+			 //BEEP_OFF;
+#ifdef USE_DSHOT
+		 if (isMotorProtocolDshot() && flipOverAfterCrashActive && !featureIsEnabled(FEATURE_3D)) {
+				 dshotCommandWrite(ALL_MOTORS, getMotorCount(), DSHOT_CMD_SPIN_DIRECTION_NORMAL, DSHOT_CMD_TYPE_INLINE);
+		 }
+#endif
+#ifdef USE_PERSISTENT_STATS
+		statsOnDisarm();
+#endif
+	 }
+}
+
+void tryArm(void)
+{
+	 if (armingConfig.gyro_cal_on_first_arm) {
+		 //gyroStartCalibration(true);
+	 }
+
+	 //updateArmingStatus();
+
+	 if (!isArmingDisabled()) {
+			 if (ARMING_FLAG(ARMED)) {
+					 return;
+			 }
+
+			 const timeUs_t currentTimeUs = micros();
+
+#ifdef USE_DSHOT
+			 if (currentTimeUs - getLastDshotBeaconCommandTimeUs() < DSHOT_BEACON_GUARD_DELAY_US) {
+					 if (tryingToArm == ARMING_DELAYED_DISARMED) {
+							 if (IS_RC_MODE_ACTIVE(BOXFLIPOVERAFTERCRASH)) {
+									 tryingToArm = ARMING_DELAYED_CRASHFLIP;
+#ifdef USE_LAUNCH_CONTROL
+							 } else if (canUseLaunchControl()) {
+									 tryingToArm = ARMING_DELAYED_LAUNCH_CONTROL;
+#endif
+							 } else {
+									 tryingToArm = ARMING_DELAYED_NORMAL;
+							 }
+					 }
+					 return;
+			 }
+
+			 if (isMotorProtocolDshot() && isModeActivationConditionPresent(BOXFLIPOVERAFTERCRASH)) {
+					 if (!(IS_RC_MODE_ACTIVE(BOXFLIPOVERAFTERCRASH) || (tryingToArm == ARMING_DELAYED_CRASHFLIP))) {
+							 flipOverAfterCrashActive = false;
+							 if (!featureIsEnabled(FEATURE_3D)) {
+									 dshotCommandWrite(ALL_MOTORS, getMotorCount(), DSHOT_CMD_SPIN_DIRECTION_NORMAL, DSHOT_CMD_TYPE_INLINE);
+							 }
+					 } else {
+							 flipOverAfterCrashActive = true;
+#ifdef USE_RUNAWAY_TAKEOFF
+							 runawayTakeoffCheckDisabled = false;
+#endif
+							 if (!featureIsEnabled(FEATURE_3D)) {
+									 dshotCommandWrite(ALL_MOTORS, getMotorCount(), DSHOT_CMD_SPIN_DIRECTION_REVERSED, DSHOT_CMD_TYPE_INLINE);
+							 }
+					 }
+			 }
+#endif
+
+#ifdef USE_LAUNCH_CONTROL
+			 if (!flipOverAfterCrashActive && (canUseLaunchControl() || (tryingToArm == ARMING_DELAYED_LAUNCH_CONTROL))) {
+					 if (launchControlState == LAUNCH_CONTROL_DISABLED) {  // only activate if it hasn't already been triggered
+							 launchControlState = LAUNCH_CONTROL_ACTIVE;
+					 }
+			 }
+#endif
+
+#ifdef USE_OSD
+			 osdSuppressStats(false);
+#endif
+			 ENABLE_ARMING_FLAG(ARMED);
+
+			 resetTryingToArm();
+
+#ifdef USE_ACRO_TRAINER
+			 pidAcroTrainerInit();
+#endif // USE_ACRO_TRAINER
+
+			 if (isModeActivationConditionPresent(BOXPREARM)) {
+					 ENABLE_ARMING_FLAG(WAS_ARMED_WITH_PREARM);
+			 }
+			 imuQuaternionHeadfreeOffsetSet();
+
+#if defined(USE_DYN_NOTCH_FILTER)
+			 resetMaxFFT();
+#endif
+
+			 disarmAt = currentTimeUs + armingConfig.auto_disarm_delay * 1e6;   // start disarm timeout, will be extended when throttle is nonzero
+
+			 lastArmingDisabledReason = 0;
+
+#ifdef USE_GPS
+			 GPS_reset_home_position();
+
+			 //beep to indicate arming
+			 if (featureIsEnabled(FEATURE_GPS)) {
+					 if (STATE(GPS_FIX) && gpsSol.numSat >= 5) {
+							 beeper(BEEPER_ARMING_GPS_FIX);
+					 } else {
+							 beeper(BEEPER_ARMING_GPS_NO_FIX);
+					 }
+			 } else {
+					 beeper(BEEPER_ARMING);
+			 }
+#else
+			 //beeper(BEEPER_ARMING);
+#endif
+
+#ifdef USE_PERSISTENT_STATS
+			 statsOnArm();
+#endif
+
+		resetTryingToArm();
+//		 if (!isFirstArmingGyroCalibrationRunning()) {
+//				 int armingDisabledReason = ffs(getArmingDisableFlags());
+//				 if (lastArmingDisabledReason != armingDisabledReason) {
+//						 lastArmingDisabledReason = armingDisabledReason;
+//
+//						 //beeperWarningBeeps(armingDisabledReason);
+//				 }
+//		 }
+	 }
+}
+
+
+void rxFrameCheck(uint32_t currentTimeUs)
+{
+	bool signalReceived = false;
+	bool useDataDrivenProcessing = true;
+	int32_t needRxSignalMaxDelayUs = DELAY_100_MS;
+
+	const uint8_t frameStatus = rxRuntimeState.rcFrameStatusFn(&rxRuntimeState);
+	signalReceived = (frameStatus & RX_FRAME_COMPLETE);
+
+    if (signalReceived) {
+        //  true only when a new packet arrives
+        needRxSignalBefore = currentTimeUs + needRxSignalMaxDelayUs;
+        rxSignalReceived = true; // immediately process packet data
+        if (useDataDrivenProcessing) {
+            rxDataProcessingRequired = true;
+            //  process the new Rx packet when it arrives
+        }
+    } else {
+        //  watch for next packet
+        if (cmpTimeUs(currentTimeUs, needRxSignalBefore) > 0) {
+            //  initial time to signalReceived failure is 100ms, then we check every 100ms
+            rxSignalReceived = false;
+            needRxSignalBefore = currentTimeUs + needRxSignalMaxDelayUs;
+            //  review and process rcData values every 100ms in case failsafe changed them
+            rxDataProcessingRequired = true;
+        }
+    }
 }
 
 typedef enum {
@@ -275,6 +473,115 @@ bool processRx(timeUs_t currentTimeUs)
     return true;
 }
 
+void processRxModes(uint32_t currentTimeUs)
+{
+    static bool armedBeeperOn = false;
+#ifdef USE_TELEMETRY
+    static bool sharedPortTelemetryEnabled = false;
+#endif
+    const throttleStatus_e throttleStatus = calculateThrottleStatus();
+
+     //When armed and motors aren't spinning, do beeps and then disarm
+     //board after delay so users without buzzer won't lose fingers.
+     //mixTable constrains motor commands, so checking  throttleStatus is enough
+     const timeUs_t autoDisarmDelayUs = armingConfig.auto_disarm_delay * 1e6;
+
+     disarmAt = currentTimeUs + autoDisarmDelayUs;  // extend auto-disarm timer
+
+     if (!(IS_RC_MODE_ACTIVE(BOXPARALYZE) && !ARMING_FLAG(ARMED))
+#ifdef USE_CMS
+        && !cmsInMenu
+#endif
+        ) {
+        processRcStickPositions();
+    }
+
+
+	 //updateInflightCalibrationState();
+
+    updateActivatedModes();
+
+     bool canUseHorizonMode = true;
+
+     if (IS_RC_MODE_ACTIVE(BOXANGLE)) {
+         // bumpless transfer to Level mode
+         canUseHorizonMode = false;
+
+         if (!FLIGHT_MODE(ANGLE_MODE)) {
+             ENABLE_FLIGHT_MODE(ANGLE_MODE);
+         }
+     } else {
+         DISABLE_FLIGHT_MODE(ANGLE_MODE); // failsafe support
+     }
+
+     if (IS_RC_MODE_ACTIVE(BOXHORIZON) && canUseHorizonMode) {
+
+         DISABLE_FLIGHT_MODE(ANGLE_MODE);
+
+         if (!FLIGHT_MODE(HORIZON_MODE)) {
+             ENABLE_FLIGHT_MODE(HORIZON_MODE);
+         }
+     } else {
+         DISABLE_FLIGHT_MODE(HORIZON_MODE);
+     }
+
+#ifdef USE_GPS_RESCUE
+    if (ARMING_FLAG(ARMED) && (IS_RC_MODE_ACTIVE(BOXGPSRESCUE) || (failsafeIsActive() && failsafeConfig()->failsafe_procedure == FAILSAFE_PROCEDURE_GPS_RESCUE))) {
+        if (!FLIGHT_MODE(GPS_RESCUE_MODE)) {
+            ENABLE_FLIGHT_MODE(GPS_RESCUE_MODE);
+        }
+    } else {
+        DISABLE_FLIGHT_MODE(GPS_RESCUE_MODE);
+    }
+#endif
+
+	if (!IS_RC_MODE_ACTIVE(BOXPREARM) && ARMING_FLAG(WAS_ARMED_WITH_PREARM)) {
+	 DISABLE_ARMING_FLAG(WAS_ARMED_WITH_PREARM);
+	}
+
+#if defined(USE_ACC) || defined(USE_MAG)
+#if defined(USE_GPS) || defined(USE_MAG)
+	 if (IS_RC_MODE_ACTIVE(BOXMAG)) {
+		 if (!FLIGHT_MODE(MAG_MODE)) {
+			 ENABLE_FLIGHT_MODE(MAG_MODE);
+			 magHold = DECIDEGREES_TO_DEGREES(attitude.values.yaw);
+		 }
+	 } else {
+		 DISABLE_FLIGHT_MODE(MAG_MODE);
+	 }
+#endif
+	 if (IS_RC_MODE_ACTIVE(BOXHEADFREE) && !FLIGHT_MODE(GPS_RESCUE_MODE)) {
+		 if (!FLIGHT_MODE(HEADFREE_MODE)) {
+			 ENABLE_FLIGHT_MODE(HEADFREE_MODE);
+		 }
+	 } else {
+		 DISABLE_FLIGHT_MODE(HEADFREE_MODE);
+	 }
+	 if (IS_RC_MODE_ACTIVE(BOXHEADADJ) && !FLIGHT_MODE(GPS_RESCUE_MODE)) {
+		 if (imuQuaternionHeadfreeOffsetSet()) {
+			//beeper(BEEPER_RX_SET);
+		 }
+	 }
+#endif
+#ifdef USE_TELEMETRY
+    if (featureIsEnabled(FEATURE_TELEMETRY)) {
+        bool enableSharedPortTelemetry = (!isModeActivationConditionPresent(BOXTELEMETRY) && ARMING_FLAG(ARMED)) || (isModeActivationConditionPresent(BOXTELEMETRY) && IS_RC_MODE_ACTIVE(BOXTELEMETRY));
+        if (enableSharedPortTelemetry && !sharedPortTelemetryEnabled) {
+            //mspSerialReleaseSharedTelemetryPorts();
+            telemetryCheckState();
+
+            sharedPortTelemetryEnabled = true;
+        } else if (!enableSharedPortTelemetry && sharedPortTelemetryEnabled) {
+            // the telemetry state must be checked immediately so that shared serial ports are released.
+            telemetryCheckState();
+            //mspSerialAllocatePorts();
+
+            sharedPortTelemetryEnabled = false;
+        }
+    }
+#endif
+}
+
 void taskUpdateRxMain(uint32_t currentTimeUs)
 {
     // Where we are using a state machine call schedulerIgnoreTaskExecRate() for all states bar one
@@ -293,7 +600,7 @@ void taskUpdateRxMain(uint32_t currentTimeUs)
         break;
 
     case RX_STATE_MODES:
-        //processRxModes(currentTimeUs);
+        processRxModes(currentTimeUs);
         rxState = RX_STATE_UPDATE;
         break;
 
@@ -343,8 +650,8 @@ static void readRxChannelsApplyRanges(void)
 void detectAndApplySignalLossBehaviour(void)
 {
     const uint32_t currentTimeMs = millis();
-    const bool failsafeAuxSwitch = IS_RC_MODE_ACTIVE(BOXFAILSAFE);
-    rxFlightChannelsValid = rxSignalReceived && !failsafeAuxSwitch;
+    //const bool failsafeAuxSwitch = IS_RC_MODE_ACTIVE(BOXFAILSAFE);
+    rxFlightChannelsValid = rxSignalReceived;// && !failsafeAuxSwitch;
     //  set rxFlightChannelsValid false when a packet is bad or we use a failsafe switch
 
     for (int channel = 0; channel < rxChannelCount; channel++) {
@@ -357,63 +664,26 @@ void detectAndApplySignalLossBehaviour(void)
             validRxSignalTimeout[channel] = currentTimeMs + MAX_INVALID_PULSE_TIME_MS;
         }
 
-        if (ARMING_FLAG(ARMED) && failsafeIsActive()) {
-            // while in failsafe Stage 2, whether Rx loss or switch induced, pass valid incoming flight channel values
-            // this allows GPS Rescue to detect the 30% requirement for termination
-            if (channel < NON_AUX_CHANNEL_COUNT) {
-                if (!thisChannelValid) {
-                    if (channel == THROTTLE ) {
-                        sample = failsafeConfig.failsafe_throttle; // stage 2 failsafe throttle value
-                    } else {
-                        sample = rxConfig.midrc;
-                    }
-                }
-            } else {
-                //  During Stage 2, set aux channels as per Stage 1 configuration
-                sample = getRxfailValue(channel);
-            }
-        } else {
-            if (failsafeAuxSwitch) {
-                sample = getRxfailValue(channel);
-                //  set channels to Stage 1 values immediately failsafe switch is activated
-            } else if (!thisChannelValid) {
-                if (cmp32(currentTimeMs, validRxSignalTimeout[channel]) < 0) {
-                    // first 300ms of Stage 1 failsafe
-                    sample = rcData[channel];
-                    //  HOLD last valid value on bad channel/s for MAX_INVALID_PULSE_TIME_MS (300ms)
-                } else {
-                    // remaining Stage 1 failsafe period after 300ms
-                    if (channel < NON_AUX_CHANNEL_COUNT) {
-                        rxFlightChannelsValid = false;
-                        //  declare signal lost after 300ms of any one bad flight channel
-                    }
-                    sample = getRxfailValue(channel);
-                    // set channels that are invalid for more than 300ms to Stage 1 values
-                }
-            }
-        }
+		if (!thisChannelValid) {
+			if (cmp32(currentTimeMs, validRxSignalTimeout[channel]) < 0) {
+			// first 300ms of Stage 1 failsafe
+			sample = rcData[channel];
+			//  HOLD last valid value on bad channel/s for MAX_INVALID_PULSE_TIME_MS (300ms)
+			} else {
+		// remaining Stage 1 failsafe period after 300ms
+				if (channel < NON_AUX_CHANNEL_COUNT) {
+					rxFlightChannelsValid = false;
+					//  declare signal lost after 300ms of any one bad flight channel
+				}
+				sample = rcData[channel];
+					// set channels that are invalid for more than 300ms to Stage 1 values
+			}
+		}
 
         sample = constrainf(sample, PWM_PULSE_MIN, PWM_PULSE_MAX);
 
-#if defined(USE_PWM) || defined(USE_PPM)
-        if (rxRuntimeState.rxProvider == RX_PROVIDER_PARALLEL_PWM || rxRuntimeState.rxProvider == RX_PROVIDER_PPM) {
-            //  smooth output for PWM and PPM using moving average
-            rcData[channel] = calculateChannelMovingAverage(channel, sample);
-        } else
-#endif
-
-        {
-            //  set rcData to either validated incoming values, or failsafe-modified values
-            rcData[channel] = sample;
-        }
-    }
-
-    if (rxFlightChannelsValid) {
-        failsafeOnValidDataReceived();
-        //  --> start the timer to exit stage 2 failsafe
-    } else {
-        failsafeOnValidDataFailed();
-        //  -> start timer to enter stage2 failsafe
+		//  set rcData to either validated incoming values, or failsafe-modified values
+		rcData[channel] = sample;
     }
 }
 

@@ -563,7 +563,8 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART2)
   {
-  	//HAL_UART_Receive_DMA(&huart2, (uint8_t *)&rx_buf[1][0], MAX_SIZE);
+	HAL_UARTEx_ReceiveToIdle_DMA(&huart2, (uint8_t *)&rx_buf2[0], MAX_SIZE);
+	__HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
   }
 
   if(huart->ErrorCode == HAL_UART_ERROR_FE) //current USART

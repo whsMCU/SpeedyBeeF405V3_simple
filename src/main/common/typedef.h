@@ -82,21 +82,6 @@ typedef struct flags_t {
     uint8_t mag_reset;
 } flags_t;
 
-enum box {
-  BOXARM,
-  BOXHEADFREE,
-  BOXACRO_MODE,
-  BOXANGLE_MODE,
-  BOXCALIBRATE_ACC,
-  BOXCALIBRATE_MAG,
-  BOXGPS_MODE,
-  BOXGPSHOME,
-  BOXGPSHOLD,
-  BOXGPSNAV,
-  BOXLAND,
-  CHECKBOXITEMS
-};
-
 typedef struct eeror_t {
   uint8_t error;
   uint8_t error_counter;

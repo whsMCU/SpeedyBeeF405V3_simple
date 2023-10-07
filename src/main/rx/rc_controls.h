@@ -142,6 +142,8 @@ void rcControlsConfig_Init(void);
 void armingConfig_Init(void);
 void flight3DConfig_Init(void);
 
+void resetTryingToArm(void);
+
 bool areUsingSticksToArm(void);
 
 bool areSticksInApModePosition(uint16_t ap_mode);

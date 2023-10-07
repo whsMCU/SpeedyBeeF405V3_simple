@@ -28,6 +28,7 @@
 #include "hw/tim.h"
 #include "flight/imu.h"
 #include "flight/position.h"
+#include "rx/rc_modes.h"
 
 #include "rx/rx.h"
 /* USER CODE END Includes */
@@ -104,7 +105,7 @@ int main(void)
   uint32_t schedule_mpu_acc = 1250;//1250us/800Hz
   uint32_t schedule_mpu_acc_temp = micros();
 
-  uint32_t schedule_imu = TASK_PERIOD_HZ(100);
+  uint32_t schedule_imu = TASK_PERIOD_HZ(500);
   uint32_t schedule_imu_temp = micros();
 
   uint32_t schedule_adc = TASK_PERIOD_HZ(1);
@@ -210,7 +211,7 @@ int main(void)
 //		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
 //		  cliPrintf("rx 1: %.1f, 2: %.1f, 3: %.1f, 4: %.1f, 5: %.1f\n\r", rcRaw[0],rcRaw[1],rcRaw[2],rcRaw[3],rcRaw[4]);
 	  }
-	  rxFrameCheck();
+	  rxFrameCheck(micros());
 	  cliMain();
 
     /* USER CODE BEGIN 3 */
@@ -246,6 +247,11 @@ void init(void)
 	imuConfig_Init();
 	rxConfig_Init();
 	rxChannelRangeConfigs_Init();
+	rxFailsafeChannelConfigs_Init();
+	statsConfig_Init();
+	armingConfig_Init();
+	rcControlsConfig_Init();
+	flight3DConfig_Init();
 	positionConfig_Init();
 	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
@@ -275,6 +281,14 @@ void init(void)
 	imuInit();
 
 	rxInit();
+
+	MSP_SET_MODE_RANGE(0,  0, 0, 1700, 2100);
+	MSP_SET_MODE_RANGE(1,  1, 1,  900, 2100);
+	MSP_SET_MODE_RANGE(2,  6, 2, 1300, 2100);
+	MSP_SET_MODE_RANGE(3, 27, 4, 1700, 2100);
+	MSP_SET_MODE_RANGE(4,  7, 5, 1700, 2100);
+	MSP_SET_MODE_RANGE(5, 13, 5, 1700, 2100);
+	MSP_SET_MODE_RANGE(6, 39, 4, 1700, 2100);
 }
 
 /**
