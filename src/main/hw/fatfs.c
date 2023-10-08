@@ -125,6 +125,56 @@ void cliFatfs(cli_args_t *args)
     ret = true;
   }
 
+  if (args->argc == 1 && args->isStr(0, "param") == true)
+  {
+    FRESULT fp_ret;
+    FIL parm_file;
+    uint32_t pre_time;
+
+    uint8_t p[5] = {1, 2, 3, 4, 5};
+
+    pre_time = millis();
+    fp_ret = f_open(&parm_file, "param.txt", FA_CREATE_ALWAYS | FA_WRITE | FA_READ);
+    if (fp_ret == FR_OK)
+    {
+	  for (int i=0; i<5; i++)
+	  {
+	      f_printf(&parm_file, "pid3 = %d\n\r", p[i]);
+	  }
+
+      f_rewind(&parm_file);
+
+      UINT len;
+      uint8_t data;
+
+      while(cliKeepLoop())
+      {
+        len = 0;
+        fp_ret = f_read (&parm_file, &data, 1, &len);
+
+        if (fp_ret != FR_OK)
+        {
+          break;
+        }
+        if (len == 0)
+        {
+          break;
+        }
+
+        cliPrintf("%c", data);
+      }
+
+      f_close(&parm_file);
+    }
+    else
+    {
+      cliPrintf("f_open fail\r\n");
+    }
+    cliPrintf("%d ms\r\n", millis()-pre_time);
+
+    ret = true;
+  }
+
   if (args->argc == 1 && args->isStr(0, "test") == true)
   {
     FRESULT fp_ret;
@@ -184,6 +234,7 @@ void cliFatfs(cli_args_t *args)
   {
     cliPrintf("fatfs info\n\r");
     cliPrintf("fatfs dir\n\r");
+    cliPrintf("fatfs param\n\r");
     cliPrintf("fatfs test\n\r");
   }
 }

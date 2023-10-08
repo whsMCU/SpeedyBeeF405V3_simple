@@ -15,5 +15,6 @@ uint32_t baroUpdate(uint32_t currentTimeUs);
 bool baroIsCalibrationComplete(void);
 void performBaroCalibrationCycle(void);
 int32_t baroCalculateAltitude(void);
+void baroStartCalibration(void);
 
 #endif /* SRC_COMMON_HW_INCLUDE_DSP310_H_ */

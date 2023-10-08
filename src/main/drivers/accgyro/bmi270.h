@@ -20,5 +20,6 @@ void gyroUpdate(void);
 bool gyroGetAccumulationAverage(float *accumulationAverage);
 void accUpdate(void);
 bool accGetAccumulationAverage(float *accumulationAverage);
+void gyroStartCalibration(bool isFirstArmingCalibration);
 
 #endif /* SRC_COMMON_HW_INCLUDE_BMI270_H_ */

@@ -29,6 +29,7 @@
 
 #include "flight/position.h"
 #include "flight/imu.h"
+#include "flight/runtime_config.h"
 
 //#include "io/gps.h"
 
@@ -132,10 +133,10 @@ void calculateEstimatedAltitude(timeUs_t currentTimeUs)
     }
 #endif
 
-    if (false) {//ARMING_FLAG(ARMED) && !altitudeOffsetSetBaro
+    if (ARMING_FLAG(ARMED) && !altitudeOffsetSetBaro) {
         baroAltOffset = baroAlt;
         altitudeOffsetSetBaro = true;
-    } else if (true) {//!ARMING_FLAG(ARMED) && altitudeOffsetSetBaro
+    } else if (!ARMING_FLAG(ARMED) && altitudeOffsetSetBaro) {
         altitudeOffsetSetBaro = false;
     }
 
@@ -149,14 +150,14 @@ void calculateEstimatedAltitude(timeUs_t currentTimeUs)
         badGpsSats = positionConfig.altNumSatsBaroFallback;
     }
 
-    if (false) {//ARMING_FLAG(ARMED)
+    if (ARMING_FLAG(ARMED)) {
         if (!altitudeOffsetSetGPS && gpsNumSat >= goodGpsSats) {
             gpsAltOffset = gpsAlt - baroAlt;
             altitudeOffsetSetGPS = true;
         } else if (gpsNumSat <= badGpsSats) {
             altitudeOffsetSetGPS = false;
         }
-    } else if (true) {//!ARMING_FLAG(ARMED) && altitudeOffsetSetGPS
+    } else if (!ARMING_FLAG(ARMED) && altitudeOffsetSetGPS) {
         altitudeOffsetSetGPS = false;
     }
 
@@ -168,7 +169,7 @@ void calculateEstimatedAltitude(timeUs_t currentTimeUs)
     }
 
     if (haveGpsAlt && haveBaroAlt && positionConfig.altSource == DEFAULT) {
-        if (false) {//ARMING_FLAG(ARMED)
+        if (ARMING_FLAG(ARMED)) {
             estimatedAltitudeCm = gpsAlt * gpsTrust + baroAlt * (1 - gpsTrust);
         } else {
             estimatedAltitudeCm = gpsAlt; //absolute altitude is shown before arming, ignore baro

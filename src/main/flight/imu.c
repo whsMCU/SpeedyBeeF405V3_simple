@@ -30,6 +30,7 @@
 
 //#include "flight/gps_rescue.h"
 #include "flight/imu.h"
+#include "flight/runtime_config.h"
 
 
 #include "drivers/accgyro/bmi270.h"
@@ -335,7 +336,7 @@ static float imuCalcKpGain(uint32_t currentTimeUs, bool useAcc, float *gyroAvera
     float ret;
     bool attitudeResetActive = false;
 
-    const bool armState = false;//ARMING_FLAG(ARMED);
+    const bool armState = ARMING_FLAG(ARMED);
 
     if (!armState) {
         if (lastArmState) {   // Just disarmed; start the gyro quiet period

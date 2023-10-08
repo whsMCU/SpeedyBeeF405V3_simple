@@ -48,6 +48,10 @@
 #define _DEF_INPUT_AF_PP      7
 
 
+#define USE_PERSISTENT_STATS
+#define USE_ADC_INTERNAL
+
+
 //#define USE_HAL_DRIVER
 
 

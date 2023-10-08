@@ -82,6 +82,13 @@ mag_t mag;
 static int16_t magADCRaw[XYZ_AXIS_COUNT];
 static uint8_t magInit = 0;
 
+void compassConfig_Init(void)
+{
+    mag.magZero.values.roll = -352;
+    mag.magZero.values.pitch = -368;
+    mag.magZero.values.yaw = 75;
+}
+
 bool compassDetect(magDev_t *magDev, sensor_align_e *alignment)
 {
     magSensor_e magHardware = MAG_NONE;

@@ -25,10 +25,17 @@
 #include "barometer/barometer_dps310.h"
 #include "compass/compass_qmc5883l.h"
 #include "adc/adcinternal.h"
+#include "adc/battery.h"
+#include "adc/current.h"
+#include "adc/voltage.h"
 #include "hw/tim.h"
 #include "flight/imu.h"
 #include "flight/position.h"
+#include "flight/stats.h"
+#include "flight/pid.h"
+#include "pg/parameter.h"
 #include "rx/rc_modes.h"
+#include "rx/rc_controls.h"
 
 #include "rx/rx.h"
 /* USER CODE END Includes */
@@ -102,6 +109,9 @@ int main(void)
   uint32_t schedule_mpu_gyro = 312;//312us/3.2KHz
   uint32_t schedule_mpu_gyro_temp = micros();
 
+  uint32_t schedule_pid = 312;//312us/3.2KHz
+  uint32_t schedule_pid_temp = micros();
+
   uint32_t schedule_mpu_acc = 1250;//1250us/800Hz
   uint32_t schedule_mpu_acc_temp = micros();
 
@@ -120,8 +130,19 @@ int main(void)
   uint32_t schedule_rx = TASK_PERIOD_HZ(33);
   uint32_t schedule_rx_temp = micros();
 
+#ifdef USE_MAG_QMC5883
   uint32_t schedule_mag = TASK_PERIOD_HZ(20);
   uint32_t schedule_mag_temp = micros();
+#endif
+
+  uint32_t schedule_bat_alerts = TASK_PERIOD_HZ(5);
+  uint32_t schedule_bat_alerts_temp = micros();
+
+  uint32_t schedule_bat_volt = TASK_PERIOD_HZ(50);
+  uint32_t schedule_bat_volt_temp = micros();
+
+  uint32_t schedule_bat_current = TASK_PERIOD_HZ(50);
+  uint32_t schedule_bat_current_temp = micros();
 
   uint32_t schedule_led = TASK_PERIOD_HZ(100);
   uint32_t schedule_led_temp = micros();
@@ -138,6 +159,12 @@ int main(void)
 	  {
 		  schedule_mpu_gyro_temp = micros();
 		  gyroUpdate();
+	  }
+
+	  if(micros()-schedule_pid_temp >= schedule_pid)
+	  {
+		  schedule_pid_temp = micros();
+		  pidUpdate();
 	  }
 
 	  if(micros()-schedule_mpu_acc_temp >= schedule_mpu_acc)
@@ -179,7 +206,7 @@ int main(void)
 		  taskUpdateRxMain(schedule_rx_temp);
 		  //rxUpdateCheck();
 	  }
-
+#ifdef USE_MAG_QMC5883
 	  if(micros()-schedule_mag_temp >= schedule_mag)
 	  {
 		  schedule_mag_temp = micros();
@@ -187,6 +214,26 @@ int main(void)
 //	      if (newDeadline != 0) {
 //	    	  schedule_mag_temp += newDeadline;
 //	      }
+	  }
+#endif
+
+	  if(micros()-schedule_bat_alerts_temp >= schedule_bat_alerts)
+	  {
+		  schedule_bat_alerts_temp = micros();
+		  taskBatteryAlerts(schedule_bat_alerts_temp);
+	  }
+
+	  if(micros()-schedule_bat_volt_temp >= schedule_bat_volt)
+	  {
+		  schedule_bat_volt_temp = micros();
+		  batteryUpdateVoltage(schedule_bat_volt_temp);
+	  }
+
+	  if(micros()-schedule_bat_current_temp >= schedule_bat_current)
+	  {
+		  schedule_bat_current_temp = micros();
+		  batteryUpdateCurrentMeter(schedule_bat_current_temp);
+
 	  }
 
 	  if(micros()-schedule_led_temp >= schedule_led)
@@ -251,8 +298,18 @@ void init(void)
 	statsConfig_Init();
 	armingConfig_Init();
 	rcControlsConfig_Init();
+#ifdef USE_MAG_QMC5883
+	compassConfig_Init();
+#endif
 	flight3DConfig_Init();
 	positionConfig_Init();
+	adcConfig_Init();
+	voltageSensorADCConfig_Init();
+	currentSensorADCConfig_Init();
+	batteryConfig_Init();
+	pidConfig_Init();
+
+
 	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
 	dps310_Init();
@@ -281,6 +338,11 @@ void init(void)
 	imuInit();
 
 	rxInit();
+
+    gyroStartCalibration(false);
+    baroStartCalibration();
+
+	batteryInit(); // always needs doing, regardless of features.
 
 	MSP_SET_MODE_RANGE(0,  0, 0, 1700, 2100);
 	MSP_SET_MODE_RANGE(1,  1, 1,  900, 2100);

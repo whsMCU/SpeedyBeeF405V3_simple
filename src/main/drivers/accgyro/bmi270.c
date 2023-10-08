@@ -158,6 +158,8 @@ static uint8_t _buffer[16] = {0, };
 
 static uint8_t gyroBuf[GYRO_BUF_SIZE];
 
+static bool firstArmingCalibrationWasStarted = false;
+
 // BMI270 register reads are 16bits with the first byte a "dummy" value 0
 // that must be ignored. The result is in the second byte.
 static uint8_t bmi270RegisterRead(uint8_t dev, bmi270Register_e registerId)
@@ -307,6 +309,19 @@ void gyroSetCalibrationCycles(void)
     mpu.gyro.calibratingG = gyroCalculateCalibratingCycles();
 }
 
+void gyroStartCalibration(bool isFirstArmingCalibration)
+{
+    if (isFirstArmingCalibration && firstArmingCalibrationWasStarted) {
+        return;
+    }
+
+    gyroSetCalibrationCycles();
+
+    if (isFirstArmingCalibration) {
+        firstArmingCalibrationWasStarted = true;
+    }
+}
+
 bool bmi270_Init(void)
 {
     bool ret = true;
@@ -337,7 +352,6 @@ bool bmi270_Init(void)
 	mpu.gyro.gyroSampleRateHz = 3200;
 	mpu.gyro.sampleLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
 	mpu.gyro.targetLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
-	gyroSetCalibrationCycles();
 	mpu.gyro.scale = GYRO_SCALE_2000DPS;
 
     bmi270Config();

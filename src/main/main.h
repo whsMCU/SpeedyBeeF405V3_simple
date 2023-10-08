@@ -43,7 +43,7 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-extern flags_t f;
+
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
