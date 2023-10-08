@@ -225,7 +225,7 @@ void processRcStickPositions()
 
     if (rcSticks == THR_LO + YAW_LO + PIT_LO + ROL_CE) {
         // GYRO calibration
-        //gyroStartCalibration(false);
+        gyroStartCalibration(false);
 
 #ifdef USE_GPS
         if (featureIsEnabled(FEATURE_GPS)) {

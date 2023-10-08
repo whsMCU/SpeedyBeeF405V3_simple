@@ -8,10 +8,6 @@
 
 #include "flight/mixer.h"
 
-extern flags_t f;
-
-//extern uint16_t debug[4];
-
 
 uint32_t time_manual_motor;
 uint8_t Manual_Motor_flag = 0;
