@@ -34,7 +34,53 @@ typedef union flightDynamicsTrims_u {
     flightDynamicsTrims_def_t values;
 } flightDynamicsTrims_t;
 
+enum {
+    FILTER_LPF1 = 0,
+    FILTER_LPF2
+};
+
+typedef union gyroLowpassFilter_u {
+    pt1Filter_t pt1FilterState;
+    biquadFilter_t biquadFilterState;
+    pt2Filter_t pt2FilterState;
+    pt3Filter_t pt3FilterState;
+} gyroLowpassFilter_t;
+
 typedef struct gyro_s {
+    bool downsampleFilterEnabled;      // if true then downsample using gyro lowpass 2, otherwise use averaging
+    uint8_t sampleCount;               // gyro sensor sample counter
+    float sampleSum[XYZ_AXIS_COUNT];   // summed samples used for downsampling
+
+    uint16_t gyro_lpf1_static_hz;
+    uint16_t gyro_lpf2_static_hz;
+
+    uint16_t gyro_soft_notch_hz_1;
+    uint16_t gyro_soft_notch_cutoff_1;
+    uint16_t gyro_soft_notch_hz_2;
+    uint16_t gyro_soft_notch_cutoff_2;
+
+    // Lowpass primary/secondary
+    uint8_t gyro_lpf1_type;
+    uint8_t gyro_lpf2_type;
+
+    uint16_t gyro_lpf1_dyn_min_hz;
+    uint16_t gyro_lpf1_dyn_max_hz;
+
+    // lowpass gyro soft filter
+    filterApplyFnPtr lowpassFilterApplyFn;
+    gyroLowpassFilter_t lowpassFilter[XYZ_AXIS_COUNT];
+
+    // lowpass2 gyro soft filter
+    filterApplyFnPtr lowpass2FilterApplyFn;
+    gyroLowpassFilter_t lowpass2Filter[XYZ_AXIS_COUNT];
+
+    // notch filters
+    filterApplyFnPtr notchFilter1ApplyFn;
+    biquadFilter_t notchFilter1[XYZ_AXIS_COUNT];
+
+    filterApplyFnPtr notchFilter2ApplyFn;
+    biquadFilter_t notchFilter2[XYZ_AXIS_COUNT];
+
     float scale;
     int16_t ADCRaw[XYZ_AXIS_COUNT];
     float gyroADC[XYZ_AXIS_COUNT];     // aligned, calibrated, scaled, but unfiltered data from the sensor(s)

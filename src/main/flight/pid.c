@@ -8,6 +8,7 @@
 #include "flight/pid.h"
 #include "flight/imu.h"
 #include "flight/runtime_config.h"
+#include "flight/mixer.h"
 #include "rx/rx.h"
 
 
@@ -168,4 +169,5 @@ void pidUpdate(void)
 		  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_heading.pid_result;
 		  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_heading.pid_result;
 	  }
+	  mixTable();
 }

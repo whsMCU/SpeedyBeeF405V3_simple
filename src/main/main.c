@@ -33,7 +33,9 @@
 #include "flight/position.h"
 #include "flight/stats.h"
 #include "flight/pid.h"
+#include "flight/mixer.h"
 #include "pg/parameter.h"
+#include "msp/msp_box.h"
 #include "rx/rc_modes.h"
 #include "rx/rc_controls.h"
 
@@ -58,7 +60,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-flags_t f;
+uint32_t time_temp = 0;
+uint32_t time_max = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,7 +92,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  uint8_t telemetry_tx_buf[40];
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -159,6 +162,10 @@ int main(void)
 	  {
 		  schedule_mpu_gyro_temp = micros();
 		  gyroUpdate();
+		  time_temp = micros()-schedule_mpu_gyro_temp;
+		  if(time_temp >= time_max){
+			  time_max = time_temp;
+		  }
 	  }
 
 	  if(micros()-schedule_pid_temp >= schedule_pid)
@@ -250,13 +257,48 @@ int main(void)
 	  if(micros()-schedule_debug_temp >= schedule_debug)
 	  {
 		  schedule_debug_temp = micros();
-		  //cliPrintf("ACC R: %d, P: %d, Y: %d\n\r", mpu.acc.ADCRaw[X], mpu.acc.ADCRaw[Y], mpu.acc.ADCRaw[Z]);
+//		  cliPrintf("ACC R: %4.d, P: %4.d, Y: %4.d\n\r", mpu.acc.ADCRaw[X], mpu.acc.ADCRaw[Y], mpu.acc.ADCRaw[Z]);
+//		  cliPrintf("ACC R: %4.f, P: %4.f, Y: %4.f\n\r", mpu.acc.accADCf[X], mpu.acc.accADCf[Y], mpu.acc.accADCf[Z]);
 		  //cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
-//		  cliPrintf("IMU R: %d, P: %d, Y: %d\n\r",    attitude.values.roll,
-//													  attitude.values.pitch,
-//													  attitude.values.yaw);
+//		  cliPrintf("IMU R: %4.d, P: %4.d, Y: %4.d\n\r",    attitude.values.roll,
+//													        attitude.values.pitch,
+//													        attitude.values.yaw);
 //		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
 //		  cliPrintf("rx 1: %.1f, 2: %.1f, 3: %.1f, 4: %.1f, 5: %.1f\n\r", rcRaw[0],rcRaw[1],rcRaw[2],rcRaw[3],rcRaw[4]);
+//	  	  telemetry_tx_buf[0] = 0x46;
+//	  	  telemetry_tx_buf[1] = 0x43;
+//
+//	  	  telemetry_tx_buf[2] = 0x10;
+//
+//	  	  telemetry_tx_buf[3] = (short)(mpu.gyro.gyroADC[X]*10);
+//	  	  telemetry_tx_buf[4] = ((short)(mpu.gyro.gyroADC[X]*10))>>8;
+//
+//	  	  telemetry_tx_buf[5] = (short)(mpu.gyro.gyroADC[Y]*10);
+//	  	  telemetry_tx_buf[6] = ((short)(mpu.gyro.gyroADC[Y]*10))>>8;
+//
+//	  	  telemetry_tx_buf[7] = (short)(mpu.gyro.gyroADC[Z]*10);
+//	  	  telemetry_tx_buf[8] = ((short)(mpu.gyro.gyroADC[Z]*10))>>8;
+//
+//	  	  telemetry_tx_buf[9] = (short)(baro.BaroAlt*10);
+//	  	  telemetry_tx_buf[10] = ((short)(baro.BaroAlt*10))>>8;
+//
+//		  telemetry_tx_buf[11] = (short)(mpu.gyro.gyroADCf[X]*10);
+//		  telemetry_tx_buf[12] = ((short)(mpu.gyro.gyroADCf[X]*10))>>8;
+//
+//		  telemetry_tx_buf[13] = (short)(mpu.gyro.gyroADCf[Y]*10);
+//		  telemetry_tx_buf[14] = ((short)(mpu.gyro.gyroADCf[Y]*10))>>8;
+//
+//		  telemetry_tx_buf[15] = (short)(mpu.gyro.gyroADCf[Z]*10);
+//		  telemetry_tx_buf[16] = ((short)(mpu.gyro.gyroADCf[Z]*10))>>8;
+//
+//	  	  telemetry_tx_buf[17] = 0x00;
+//	  	  telemetry_tx_buf[18] = 0x00;
+//
+//	  	  telemetry_tx_buf[19] = 0xff;
+//
+//	  	  for(int i=0;i<19;i++) telemetry_tx_buf[19] = telemetry_tx_buf[19] - telemetry_tx_buf[i];
+//
+//	  	  uartWrite(0, &telemetry_tx_buf[0], 20);
 	  }
 	  rxFrameCheck(micros());
 	  cliMain();
@@ -291,7 +333,8 @@ void hwInit(void)
 
 void init(void)
 {
-	imuConfig_Init();
+    initActiveBoxIds();
+    imuConfig_Init();
 	rxConfig_Init();
 	rxChannelRangeConfigs_Init();
 	rxFailsafeChannelConfigs_Init();
@@ -336,6 +379,7 @@ void init(void)
 	////////////////////////////////////////
 
 	imuInit();
+	mixerInit();
 
 	rxInit();
 

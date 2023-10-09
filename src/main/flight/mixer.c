@@ -58,16 +58,10 @@ const mixer_t mixers[] = {
 
 void mixerInit(void)
 {
-	int i;
-    for (i = 0; i < 4; i++)
-	  {
-			#ifdef QUAD_X
-      currentMixer[i] = mixers[QuadX].motor[i];   //0 = QuadP, 1 = QuadX
-			#endif
-			#ifdef QUAD_P
-      currentMixer[i] = mixers[QuadP].motor[i];   //0 = QuadP, 1 = QuadX
-			#endif
-		}
+    for (int i = 0; i < 4; i++)
+	{
+    	currentMixer[i] = mixers[QuadX].motor[i];   //0 = QuadP, 1 = QuadX
+	}
 }
 
 void mixTable(void)
@@ -94,21 +88,15 @@ void mixTable(void)
       #endif
 		}
   #endif
-#ifdef MOTOR_DC
-	  if(motor[i] <    0) motor[i] = 0;
-	  if(motor[i] > 2000) motor[i] = 2000;
-#endif
-#ifdef MOTOR_ESC
-	  motor[i] = constrain(motor[i], 2250, 4500);
-#endif
-#ifdef MOTOR_DC
-  if(RC.rcCommand[THROTTLE] < 200 || f.ARMED == 0){
-    motor[i] = 0;
-#endif
-#ifdef MOTOR_ESC
-  if(RC.rcCommand[THROTTLE] < 2350 || f.ARMED == 0){
-    motor[i] = 2250;
-#endif
+
+
+//	motor[i] = constrain(motor[i], 2250, 4500);
+//
+//
+//
+//  if(RC.rcCommand[THROTTLE] < 2350 || f.ARMED == 0){
+//    motor[i] = 2250;
+
 //		pid.output1[i] = 0;
 //		pid.output2[i] = 0;
 //		pid.Iterm[i] = 0;

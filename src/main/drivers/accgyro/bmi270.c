@@ -32,7 +32,12 @@ mpu_t mpu;
 #define CALIBRATING_ACC_CYCLES              400
 #define gyroCalibrationDuration 125
 
-#define acc_lpf_factor 4
+#define LPF_MAX_HZ 1000 // so little filtering above 1000hz that if the user wants less delay, they must disable the filter
+#define DYN_LPF_MAX_HZ 1000
+
+#define GYRO_LPF1_DYN_MIN_HZ_DEFAULT 250
+#define GYRO_LPF1_DYN_MAX_HZ_DEFAULT 500
+#define GYRO_LPF2_HZ_DEFAULT 500
 
 #define gyroMovementCalibrationThreshold    48
 
@@ -286,6 +291,159 @@ void bmi270Config()
 	}
 }
 
+static uint16_t calculateNyquistAdjustedNotchHz(uint16_t notchHz, uint16_t notchCutoffHz)
+{
+    const uint32_t gyroFrequencyNyquist = 1000000 / 2 / mpu.gyro.targetLooptime;
+    if (notchHz > gyroFrequencyNyquist) {
+        if (notchCutoffHz < gyroFrequencyNyquist) {
+            notchHz = gyroFrequencyNyquist;
+        } else {
+            notchHz = 0;
+        }
+    }
+
+    return notchHz;
+}
+
+static void gyroInitFilterNotch1(uint16_t notchHz, uint16_t notchCutoffHz)
+{
+    mpu.gyro.notchFilter1ApplyFn = nullFilterApply;
+
+    notchHz = calculateNyquistAdjustedNotchHz(notchHz, notchCutoffHz);
+
+    if (notchHz != 0 && notchCutoffHz != 0) {
+        mpu.gyro.notchFilter1ApplyFn = (filterApplyFnPtr)biquadFilterApply;
+        const float notchQ = filterGetNotchQ(notchHz, notchCutoffHz);
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            biquadFilterInit(&mpu.gyro.notchFilter1[axis], notchHz, mpu.gyro.targetLooptime, notchQ, FILTER_NOTCH, 1.0f);
+        }
+    }
+}
+
+static void gyroInitFilterNotch2(uint16_t notchHz, uint16_t notchCutoffHz)
+{
+    mpu.gyro.notchFilter2ApplyFn = nullFilterApply;
+
+    notchHz = calculateNyquistAdjustedNotchHz(notchHz, notchCutoffHz);
+
+    if (notchHz != 0 && notchCutoffHz != 0) {
+        mpu.gyro.notchFilter2ApplyFn = (filterApplyFnPtr)biquadFilterApply;
+        const float notchQ = filterGetNotchQ(notchHz, notchCutoffHz);
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            biquadFilterInit(&mpu.gyro.notchFilter2[axis], notchHz, mpu.gyro.targetLooptime, notchQ, FILTER_NOTCH, 1.0f);
+        }
+    }
+}
+
+static bool gyroInitLowpassFilterLpf(int slot, int type, uint16_t lpfHz, uint32_t looptime)
+{
+    filterApplyFnPtr *lowpassFilterApplyFn;
+    gyroLowpassFilter_t *lowpassFilter = NULL;
+
+    switch (slot) {
+    case FILTER_LPF1:
+        lowpassFilterApplyFn = &mpu.gyro.lowpassFilterApplyFn;
+        lowpassFilter = mpu.gyro.lowpassFilter;
+        break;
+
+    case FILTER_LPF2:
+        lowpassFilterApplyFn = &mpu.gyro.lowpass2FilterApplyFn;
+        lowpassFilter = mpu.gyro.lowpass2Filter;
+        break;
+
+    default:
+        return false;
+    }
+
+    bool ret = false;
+
+    // Establish some common constants
+    const uint32_t gyroFrequencyNyquist = 1000000 / 2 / looptime;
+    const float gyroDt = looptime * 1e-6f;
+
+    // Gain could be calculated a little later as it is specific to the pt1/bqrcf2/fkf branches
+    const float gain = pt1FilterGain(lpfHz, gyroDt);
+
+    // Dereference the pointer to null before checking valid cutoff and filter
+    // type. It will be overridden for positive cases.
+    *lowpassFilterApplyFn = nullFilterApply;
+
+    // If lowpass cutoff has been specified
+    if (lpfHz) {
+        switch (type) {
+        case FILTER_PT1:
+            *lowpassFilterApplyFn = (filterApplyFnPtr) pt1FilterApply;
+            for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+                pt1FilterInit(&lowpassFilter[axis].pt1FilterState, gain);
+            }
+            ret = true;
+            break;
+        case FILTER_BIQUAD:
+            if (lpfHz <= gyroFrequencyNyquist) {
+#ifdef USE_DYN_LPF
+                *lowpassFilterApplyFn = (filterApplyFnPtr) biquadFilterApplyDF1;
+#else
+                *lowpassFilterApplyFn = (filterApplyFnPtr) biquadFilterApply;
+#endif
+                for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+                    biquadFilterInitLPF(&lowpassFilter[axis].biquadFilterState, lpfHz, looptime);
+                }
+                ret = true;
+            }
+            break;
+        case FILTER_PT2:
+            *lowpassFilterApplyFn = (filterApplyFnPtr) pt2FilterApply;
+            for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+                pt2FilterInit(&lowpassFilter[axis].pt2FilterState, gain);
+            }
+            ret = true;
+            break;
+        case FILTER_PT3:
+            *lowpassFilterApplyFn = (filterApplyFnPtr) pt3FilterApply;
+            for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+                pt3FilterInit(&lowpassFilter[axis].pt3FilterState, gain);
+            }
+            ret = true;
+            break;
+        }
+    }
+    return ret;
+}
+
+void gyroInitFilters(void)
+{
+    uint16_t gyro_lpf1_init_hz = mpu.gyro.gyro_lpf1_static_hz;
+
+#ifdef USE_DYN_LPF
+    if (mpu.gyro.gyro_lpf1_dyn_min_hz > 0) {
+        gyro_lpf1_init_hz = mpu.gyro.gyro_lpf1_dyn_min_hz;
+    }
+#endif
+
+    gyroInitLowpassFilterLpf(
+      FILTER_LPF1,
+	  mpu.gyro.gyro_lpf1_type,
+      gyro_lpf1_init_hz,
+      mpu.gyro.targetLooptime
+    );
+
+    mpu.gyro.downsampleFilterEnabled = gyroInitLowpassFilterLpf(
+      FILTER_LPF2,
+	  mpu.gyro.gyro_lpf2_type,
+	  mpu.gyro.gyro_lpf2_static_hz,
+      mpu.gyro.sampleLooptime
+    );
+
+    gyroInitFilterNotch1(mpu.gyro.gyro_soft_notch_hz_1, mpu.gyro.gyro_soft_notch_cutoff_1);
+    gyroInitFilterNotch2(mpu.gyro.gyro_soft_notch_hz_2, mpu.gyro.gyro_soft_notch_cutoff_2);
+#ifdef USE_DYN_LPF
+    dynLpfFilterInit();
+#endif
+#ifdef USE_DYN_NOTCH_FILTER
+    dynNotchInit(&dynNotchConfig, mpu.gyro.targetLooptime);
+#endif
+}
+
 void accInitFilters(void)
 {
     // Only set the lowpass cutoff if the ACC sample rate is detected otherwise
@@ -322,6 +480,13 @@ void gyroStartCalibration(bool isFirstArmingCalibration)
     }
 }
 
+static void adjustFilterLimit(uint16_t *parm, uint16_t resetValue)
+{
+    if (*parm > LPF_MAX_HZ) {
+        *parm = resetValue;
+    }
+}
+
 bool bmi270_Init(void)
 {
     bool ret = true;
@@ -347,12 +512,51 @@ bool bmi270_Init(void)
     mpu.txBuf = gyroBuf;
     mpu.rxBuf = &gyroBuf[GYRO_BUF_SIZE / 2];
 
+	mpu.gyro.gyro_lpf1_static_hz = GYRO_LPF1_DYN_MIN_HZ_DEFAULT;
+	mpu.gyro.gyro_lpf1_type = FILTER_PT1;
+
+	mpu.gyro.gyro_lpf2_type = FILTER_PT1;
+	mpu.gyro.gyro_lpf2_static_hz = GYRO_LPF2_HZ_DEFAULT;
+
+	mpu.gyro.gyro_soft_notch_hz_1 = 0;
+	mpu.gyro.gyro_soft_notch_cutoff_1 = 0;
+	mpu.gyro.gyro_soft_notch_hz_2 = 0;
+	mpu.gyro.gyro_soft_notch_cutoff_2 = 0;
+
+    // Fix gyro filter settings to handle cases where an older configurator was used that
+    // allowed higher cutoff limits from previous firmware versions.
+    adjustFilterLimit(&mpu.gyro.gyro_lpf1_static_hz, LPF_MAX_HZ);
+    adjustFilterLimit(&mpu.gyro.gyro_lpf2_static_hz, LPF_MAX_HZ);
+    adjustFilterLimit(&mpu.gyro.gyro_soft_notch_hz_1, LPF_MAX_HZ);
+    adjustFilterLimit(&mpu.gyro.gyro_soft_notch_cutoff_1, 0);
+    adjustFilterLimit(&mpu.gyro.gyro_soft_notch_hz_2, LPF_MAX_HZ);
+    adjustFilterLimit(&mpu.gyro.gyro_soft_notch_cutoff_2, 0);
+
+    // Prevent invalid notch cutoff
+    if (mpu.gyro.gyro_soft_notch_cutoff_1 >= mpu.gyro.gyro_soft_notch_hz_1) {
+    	mpu.gyro.gyro_soft_notch_hz_1 = 0;
+    }
+    if (mpu.gyro.gyro_soft_notch_cutoff_2 >= mpu.gyro.gyro_soft_notch_hz_2) {
+    	mpu.gyro.gyro_soft_notch_hz_2 = 0;
+    }
+#ifdef USE_DYN_LPF
+    //Prevent invalid dynamic lowpass filter
+    if (mpu.gyro.gyro_lpf1_dyn_min_hz > mpu.gyro.gyro_lpf1_dyn_max_hz) {
+    	mpu.gyro.gyro_lpf1_dyn_min_hz = 0;
+    }
+#endif
+
+    mpu.gyro.gyro_lpf1_dyn_min_hz = GYRO_LPF1_DYN_MIN_HZ_DEFAULT;
+    mpu.gyro.gyro_lpf1_dyn_max_hz = GYRO_LPF1_DYN_MAX_HZ_DEFAULT;
+
     mpu.gyro.gyro_high_fsr = false;
     mpu.gyro.hardware_lpf = GYRO_HARDWARE_LPF_NORMAL;
 	mpu.gyro.gyroSampleRateHz = 3200;
 	mpu.gyro.sampleLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
 	mpu.gyro.targetLooptime = 1e6 / mpu.gyro.gyroSampleRateHz;
 	mpu.gyro.scale = GYRO_SCALE_2000DPS;
+
+	gyroInitFilters();
 
     bmi270Config();
 
@@ -503,8 +707,18 @@ void gyroUpdate(void)
 	    	mpu.gyro.ADCRaw[axis] -= mpu.gyro.gyroZero[axis];
 	    	mpu.gyro.gyroADC[axis] = mpu.gyro.ADCRaw[axis] * mpu.gyro.scale;
 
+	        if (mpu.gyro.downsampleFilterEnabled) {
+	            // using gyro lowpass 2 filter for downsampling
+	        	mpu.gyro.gyroADCf[axis] = mpu.gyro.lowpass2FilterApplyFn((filter_t *)&mpu.gyro.lowpass2Filter[axis], mpu.gyro.gyroADC[axis]);
+
+		        // apply static notch filters and software lowpass filters
+		        mpu.gyro.gyroADCf[axis] = mpu.gyro.notchFilter1ApplyFn((filter_t *)&mpu.gyro.notchFilter1[axis], mpu.gyro.gyroADCf[axis]);
+		        mpu.gyro.gyroADCf[axis] = mpu.gyro.notchFilter2ApplyFn((filter_t *)&mpu.gyro.notchFilter2[axis], mpu.gyro.gyroADCf[axis]);
+		        mpu.gyro.gyroADCf[axis] = mpu.gyro.lowpassFilterApplyFn((filter_t *)&mpu.gyro.lowpassFilter[axis], mpu.gyro.gyroADCf[axis]);
+	        }
+
             // integrate using trapezium rule to avoid bias
-            mpu.gyro.accumulatedMeasurements[axis] += 0.5f * (mpu.gyro.gyroPrevious[axis] + mpu.gyro.gyroADC[axis]) * mpu.gyro.targetLooptime;
+            mpu.gyro.accumulatedMeasurements[axis] += 0.5f * (mpu.gyro.gyroPrevious[axis] + mpu.gyro.gyroADCf[axis]) * mpu.gyro.targetLooptime;
             mpu.gyro.gyroPrevious[axis] = mpu.gyro.gyroADCf[axis];
 	    }
         mpu.gyro.accumulatedMeasurementCount++;
@@ -542,6 +756,11 @@ static bool isOnFirstAccelerationCalibrationCycle(void)
 	return mpu.acc.calibratingA == CALIBRATING_ACC_CYCLES;
 }
 
+bool accIsCalibrationComplete(void)
+{
+    return mpu.acc.calibratingA == 0;
+}
+
 void performAcclerationCalibration(void)
 {
     static int32_t a[3];
@@ -568,7 +787,7 @@ void performAcclerationCalibration(void)
     	mpu.acc.accZero[Z] = (a[Z] + (CALIBRATING_ACC_CYCLES / 2)) / CALIBRATING_ACC_CYCLES - mpu.acc.acc_1G;
 
 //        resetRollAndPitchTrims(rollAndPitchTrims);
-//        setConfigCalibrationCompleted();
+        //setConfigCalibrationCompleted();
 
         //saveConfigAndNotify();
     }
@@ -591,7 +810,7 @@ void accUpdate(void)
 		}
 	}
 
-    if (!mpu.acc.calibratingA == 0) {
+    if (!accIsCalibrationComplete()) {
         performAcclerationCalibration();
     }
 

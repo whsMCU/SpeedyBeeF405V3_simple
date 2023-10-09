@@ -80,6 +80,8 @@ void imuConfig_Init(void)
 	imuConfig.dcm_kp = 2500;                // 1.0 * 10000
 	imuConfig.dcm_ki = 0;                   // 0.003 * 10000
 	imuConfig.small_angle = 25;
+    imuRuntimeConfig.dcm_kp = imuConfig.dcm_kp / 10000.0f;
+    imuRuntimeConfig.dcm_ki = imuConfig.dcm_ki / 10000.0f;
 }
 
 static void imuQuaternionComputeProducts(quaternion *quat, quaternionProducts *quatProd)
