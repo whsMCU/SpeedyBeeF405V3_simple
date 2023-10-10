@@ -24,8 +24,11 @@
 
 #pragma once
 
+extern mag_t mag;
+
 void compassConfig_Init(void);
 bool compassInit(void);
 uint32_t compassUpdate(uint32_t currentTimeUs);
 bool qmc5883lDetect(magDev_t *magDev);
+bool compassIsHealthy(void);
 

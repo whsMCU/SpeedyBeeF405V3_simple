@@ -30,6 +30,7 @@
 
 //#include "rc.h"
 #include "flight/runtime_config.h"
+#include "flight/core.h"
 
 #include "barometer/barometer.h"
 //#include "sensors/battery.h"
@@ -100,21 +101,6 @@ throttleStatus_e calculateThrottleStatus(void)
 #define repeatAfter(t) { \
     rcDelayMs -= (t); \
     doNotRepeat = false; \
-}
-
-void resetArmingDisabled(void)
-{
-    lastArmingDisabledReason = 0;
-}
-
-void resetTryingToArm()
-{
-    tryingToArm = ARMING_DELAYED_DISARMED;
-}
-
-bool isTryingToArm()
-{
-    return (tryingToArm != ARMING_DELAYED_DISARMED);
 }
 
 void processRcStickPositions()

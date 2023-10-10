@@ -9,6 +9,7 @@
 #include "flight/imu.h"
 #include "flight/runtime_config.h"
 #include "flight/mixer.h"
+#include "flight/core.h"
 #include "rx/rx.h"
 
 
@@ -21,7 +22,7 @@ unsigned short ccr1, ccr2, ccr3, ccr4;
 
 float yaw_heading_reference;
 
-#define DT 0.001f
+#define DT 0.000312f
 #define OUTER_DERIV_FILT_ENABLE 1
 #define INNER_DERIV_FILT_ENABLE 1
 
@@ -139,35 +140,35 @@ void Reset_All_PID_Integrator(void)
 	Reset_PID_Integrator(&yaw_rate);
 }
 
-void pidUpdate(void)
+void pidUpdate(timeUs_t currentTimeUs)
 {
+	UNUSED(currentTimeUs);
 
-	  Double_Roll_Pitch_PID_Calculation(&pitch, (rcData[1] - 1500) * 0.1f, (attitude.values.pitch/10), mpu.gyro.gyroADC[X]);
-	  Double_Roll_Pitch_PID_Calculation(&roll, (rcData[0] - 1500) * 0.1f, (attitude.values.roll/10), mpu.gyro.gyroADC[Y]);
+    Double_Roll_Pitch_PID_Calculation(&pitch, (rcData[1] - 1500) * 0.1f, (attitude.values.pitch/10), mpu.gyro.gyroADC[X]);
+	Double_Roll_Pitch_PID_Calculation(&roll, (rcData[0] - 1500) * 0.1f, (attitude.values.roll/10), mpu.gyro.gyroADC[Y]);
 
-	  if(rcData[2] < 1030 || !ARMING_FLAG(ARMED))
-	  {
-		  Reset_All_PID_Integrator();
-	  }
+	if(rcData[2] < 1030 || !ARMING_FLAG(ARMED))
+	{
+	  Reset_All_PID_Integrator();
+	}
 
-	  if(rcData[3] < 1485 || rcData[3] > 1515)
-	  {
-		  yaw_heading_reference = (attitude.values.yaw/10);
-		  Single_Yaw_Rate_PID_Calculation(&yaw_rate, (rcData[3] - 1500), mpu.gyro.gyroADC[Z]);
+	if(rcData[3] < 1485 || rcData[3] > 1515)
+	{
+	  yaw_heading_reference = (attitude.values.yaw/10);
+	  Single_Yaw_Rate_PID_Calculation(&yaw_rate, (rcData[3] - 1500), mpu.gyro.gyroADC[Z]);
 
-		  ccr1 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
-		  ccr2 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
-		  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_rate.pid_result;
-		  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_rate.pid_result;
-	  }
-	  else
-	  {
-		  Single_Yaw_Heading_PID_Calculation(&yaw_heading, yaw_heading_reference, (attitude.values.yaw/10), mpu.gyro.gyroADC[Z]);
+	  ccr1 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
+	  ccr2 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
+	  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_rate.pid_result;
+	  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_rate.pid_result;
+	}
+	else
+	{
+	  Single_Yaw_Heading_PID_Calculation(&yaw_heading, yaw_heading_reference, (attitude.values.yaw/10), mpu.gyro.gyroADC[Z]);
 
-		  ccr1 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_heading.pid_result;
-		  ccr2 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result + roll.in.pid_result + yaw_heading.pid_result;
-		  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_heading.pid_result;
-		  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_heading.pid_result;
-	  }
-	  mixTable();
+	  ccr1 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_heading.pid_result;
+	  ccr2 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result + roll.in.pid_result + yaw_heading.pid_result;
+	  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_heading.pid_result;
+	  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_heading.pid_result;
+	}
 }

@@ -33,6 +33,7 @@
 #include "flight/position.h"
 #include "flight/stats.h"
 #include "flight/pid.h"
+#include "flight/core.h"
 #include "flight/mixer.h"
 #include "pg/parameter.h"
 #include "msp/msp_box.h"
@@ -171,7 +172,7 @@ int main(void)
 	  if(micros()-schedule_pid_temp >= schedule_pid)
 	  {
 		  schedule_pid_temp = micros();
-		  pidUpdate();
+		  MainPidLoop(schedule_pid_temp);
 	  }
 
 	  if(micros()-schedule_mpu_acc_temp >= schedule_mpu_acc)
@@ -217,10 +218,10 @@ int main(void)
 	  if(micros()-schedule_mag_temp >= schedule_mag)
 	  {
 		  schedule_mag_temp = micros();
-//	      const uint32_t newDeadline = compassUpdate(schedule_mag_temp);
-//	      if (newDeadline != 0) {
-//	    	  schedule_mag_temp += newDeadline;
-//	      }
+	      const uint32_t newDeadline = compassUpdate(schedule_mag_temp);
+	      if (newDeadline != 0) {
+	    	  schedule_mag_temp += newDeadline;
+	      }
 	  }
 #endif
 
@@ -340,6 +341,7 @@ void init(void)
 	rxFailsafeChannelConfigs_Init();
 	statsConfig_Init();
 	armingConfig_Init();
+	initRcProcessing();
 	rcControlsConfig_Init();
 #ifdef USE_MAG_QMC5883
 	compassConfig_Init();

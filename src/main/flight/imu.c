@@ -34,6 +34,7 @@
 
 
 #include "drivers/accgyro/bmi270.h"
+#include "drivers/compass/compass_qmc5883l.h"
 
 // the limit (in degrees/second) beyond which we stop integrating
 // omega_I. At larger spin rates the DCM PI controller can get 'dizzy'
@@ -292,17 +293,17 @@ void imuUpdateEulerAngles(void)
 {
     quaternionProducts buffer;
 
-//    if (FLIGHT_MODE(HEADFREE_MODE)) {
-//       imuQuaternionComputeProducts(&headfree, &buffer);
-//
-//       attitude.values.roll = lrintf(atan2_approx((+2.0f * (buffer.wx + buffer.yz)), (+1.0f - 2.0f * (buffer.xx + buffer.yy))) * (1800.0f / M_PIf));
-//       attitude.values.pitch = lrintf(((0.5f * M_PIf) - acos_approx(+2.0f * (buffer.wy - buffer.xz))) * (1800.0f / M_PIf));
-//       attitude.values.yaw = lrintf((-atan2_approx((+2.0f * (buffer.wz + buffer.xy)), (+1.0f - 2.0f * (buffer.yy + buffer.zz))) * (1800.0f / M_PIf)));
-//    } else {
+    if (FLIGHT_MODE(HEADFREE_MODE)) {
+       imuQuaternionComputeProducts(&headfree, &buffer);
+
+       attitude.values.roll = lrintf(atan2_approx((+2.0f * (buffer.wx + buffer.yz)), (+1.0f - 2.0f * (buffer.xx + buffer.yy))) * (1800.0f / M_PIf));
+       attitude.values.pitch = lrintf(((0.5f * M_PIf) - acos_approx(+2.0f * (buffer.wy - buffer.xz))) * (1800.0f / M_PIf));
+       attitude.values.yaw = lrintf((-atan2_approx((+2.0f * (buffer.wz + buffer.xy)), (+1.0f - 2.0f * (buffer.yy + buffer.zz))) * (1800.0f / M_PIf)));
+    } else {
        attitude.values.roll = lrintf(atan2_approx(rMat[2][1], rMat[2][2]) * (1800.0f / M_PIf));
        attitude.values.pitch = lrintf(((0.5f * M_PIf) - acos_approx(-rMat[2][0])) * (1800.0f / M_PIf));
        attitude.values.yaw = lrintf((-atan2_approx(rMat[1][0], rMat[0][0]) * (1800.0f / M_PIf)));
-//    }
+    }
 
     if (attitude.values.yaw < 0) {
         attitude.values.yaw += 3600;
@@ -447,7 +448,7 @@ static void imuCalculateEstimatedAttitude(timeUs_t currentTimeUs)
     previousIMUUpdateTime = currentTimeUs;
 
 #ifdef USE_MAG
-    if (sensors(SENSOR_MAG) && compassIsHealthy()
+    if (compassIsHealthy()
 #ifdef USE_GPS_RESCUE
         && !gpsRescueDisableMag()
 #endif
@@ -492,22 +493,6 @@ static void imuCalculateEstimatedAttitude(timeUs_t currentTimeUs)
                         useCOG, courseOverGround,  imuCalcKpGain(currentTimeUs, useAcc, gyroAverage));
 
     imuUpdateEulerAngles();
-}
-
-static int calculateThrottleAngleCorrection(void)
-{
-    /*
-    * Use 0 as the throttle angle correction if we are inverted, vertical or with a
-    * small angle < 0.86 deg
-    * TODO: Define this small angle in config.
-    */
-    if (getCosTiltAngle() <= 0.015f) {
-        return 0;
-    }
-    int angle = lrintf(acos_approx(getCosTiltAngle()) * throttleAngleScale);
-    if (angle > 900)
-        angle = 900;
-    return lrintf(throttleAngleValue * sin_approx(angle / (900.0f * M_PIf / 2.0f)));
 }
 
 void imuUpdateAttitude(timeUs_t currentTimeUs)

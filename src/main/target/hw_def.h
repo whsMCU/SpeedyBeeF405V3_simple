@@ -27,14 +27,14 @@
 #define _PIN_SDCARD_CS 3
 #define _PIN_MAX7456_CS 4
 //----------
-
+#define USE_BARO_DPS310
 #define USE_BARO
 #define USE_ACC
 #define USE_GYRO
 #define USE_ADC
 //#define USE_GPS
-#define USE_BARO_DPS310
-//#define USE_MAG_QMC5883
+#define USE_MAG_QMC5883
+#define USE_MAG
 
 #define _USE_HW_CDC
 #define _USE_HW_USB

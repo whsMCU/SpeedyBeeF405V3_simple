@@ -223,33 +223,6 @@ extern linkQualitySource_e linkQualitySource;
 
 extern rxRuntimeState_t rxRuntimeState; //!!TODO remove this extern, only needed once for channelCount
 
-enum {
-    ARMING_DELAYED_DISARMED = 0,
-    ARMING_DELAYED_NORMAL = 1,
-    ARMING_DELAYED_CRASHFLIP = 2,
-    ARMING_DELAYED_LAUNCH_CONTROL = 3,
-};
-
-typedef enum {
-    DISARM_REASON_ARMING_DISABLED   = 0,
-    DISARM_REASON_FAILSAFE          = 1,
-    DISARM_REASON_THROTTLE_TIMEOUT  = 2,
-    DISARM_REASON_STICKS            = 3,
-    DISARM_REASON_SWITCH            = 4,
-    DISARM_REASON_CRASH_PROTECTION  = 5,
-    DISARM_REASON_RUNAWAY_TAKEOFF   = 6,
-    DISARM_REASON_GPS_RESCUE        = 7,
-    DISARM_REASON_SERIAL_COMMAND    = 8,
-#ifdef UNIT_TEST
-    DISARM_REASON_SYSTEM            = 255,
-#endif
-} flightLogDisarmReason_e;
-
-extern uint32_t disarmAt;     // Time of automatic disarm when "Don't spin the motors when armed" is enabled and auto_disarm_delay is nonzero
-extern int lastArmingDisabledReason;
-extern uint32_t lastDisarmTimeUs;
-extern int tryingToArm;
-
 void rxConfig_Init(void);
 void rxChannelRangeConfigs_Init(void);
 void rxFailsafeChannelConfigs_Init(void);
@@ -258,8 +231,6 @@ void rxInit(void);
 void rxProcessPending(bool state);
 bool rxUpdateCheck(void);
 void taskUpdateRxMain(uint32_t currentTimeUs);
-void disarm(flightLogDisarmReason_e reason);
-void tryArm(void);
 void rxFrameCheck(uint32_t currentTimeUs);
 bool rxIsReceivingSignal(void);
 bool rxAreFlightChannelsValid(void);

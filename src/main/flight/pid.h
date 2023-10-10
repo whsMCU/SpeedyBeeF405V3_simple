@@ -8,8 +8,8 @@
 #ifndef SRC_COMMON_CORE_PID_H_
 #define SRC_COMMON_CORE_PID_H_
 
+#include "common/time.h"
 #include "hw.h"
-
 
 typedef struct _PIDSingle
 {
@@ -50,6 +50,6 @@ void Single_Yaw_Rate_PID_Calculation(PIDSingle* axis, float set_point, float val
 void Single_Yaw_Heading_PID_Calculation(PIDSingle* axis, float set_point, float angle, float rate);
 void Reset_PID_Integrator(PIDSingle* axis);
 void Reset_All_PID_Integrator(void);
-void pidUpdate(void);
+void pidUpdate(timeUs_t currentTimeUs);
 
 #endif /* SRC_COMMON_CORE_PID_H_ */
