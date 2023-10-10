@@ -38,6 +38,7 @@
 #include "rx/rc_controls.h"
 #include "rx/rc_modes.h"
 #include "rx/rx.h"
+#include "rx/rc.h"
 #include "rx/crsf.h"
 
 const char rcChannelLetters[] = "AERT12345678abcdefgh";

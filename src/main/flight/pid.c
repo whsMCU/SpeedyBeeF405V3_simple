@@ -11,6 +11,7 @@
 #include "flight/mixer.h"
 #include "flight/core.h"
 #include "rx/rx.h"
+#include "rx/rc_controls.h"
 
 
 PIDDouble roll;
@@ -139,25 +140,28 @@ void Reset_All_PID_Integrator(void)
 	Reset_PID_Integrator(&yaw_heading);
 	Reset_PID_Integrator(&yaw_rate);
 }
+#define pulseScale 1.679999
+#define pulseOffset -1260
 
 void pidUpdate(timeUs_t currentTimeUs)
 {
 	UNUSED(currentTimeUs);
 
-    Double_Roll_Pitch_PID_Calculation(&pitch, (rcData[1] - 1500) * 0.1f, (attitude.values.pitch/10), mpu.gyro.gyroADC[X]);
-	Double_Roll_Pitch_PID_Calculation(&roll, (rcData[0] - 1500) * 0.1f, (attitude.values.roll/10), mpu.gyro.gyroADC[Y]);
+	Double_Roll_Pitch_PID_Calculation(&roll, rcCommand[ROLL] * 0.1f, (attitude.values.roll/10), mpu.gyro.gyroADC[X]);
+    Double_Roll_Pitch_PID_Calculation(&pitch, rcCommand[PITCH] * 0.1f, (attitude.values.pitch/10), mpu.gyro.gyroADC[Y]);
 
-	if(rcData[2] < 1030 || !ARMING_FLAG(ARMED))
+	if(rcData[THROTTLE] < rxConfig.mincheck || !ARMING_FLAG(ARMED))
 	{
 	  Reset_All_PID_Integrator();
 	}
 
-	if(rcData[3] < 1485 || rcData[3] > 1515)
+	if(rcData[YAW] < 1485 || rcData[YAW] > 1515)
 	{
 	  yaw_heading_reference = (attitude.values.yaw/10);
-	  Single_Yaw_Rate_PID_Calculation(&yaw_rate, (rcData[3] - 1500), mpu.gyro.gyroADC[Z]);
+	  Single_Yaw_Rate_PID_Calculation(&yaw_rate, rcCommand[YAW], mpu.gyro.gyroADC[Z]);
+	  //ccr = lrintf((value * pulseScale) + pulseOffset);
 
-	  ccr1 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
+	  ccr1 = 1000 + (rcData[2] - 1000) * 10 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
 	  ccr2 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
 	  ccr3 = 10500 + 500 + (rcData[2] - 1000) * 10 + pitch.in.pid_result - roll.in.pid_result - yaw_rate.pid_result;
 	  ccr4 = 10500 + 500 + (rcData[2] - 1000) * 10 - pitch.in.pid_result - roll.in.pid_result + yaw_rate.pid_result;

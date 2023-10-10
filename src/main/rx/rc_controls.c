@@ -35,6 +35,7 @@
 #include "barometer/barometer.h"
 //#include "sensors/battery.h"
 #include "compass/compass.h"
+#include "compass/compass_qmc5883l.h"
 #include "accgyro/bmi270.h"
 
 #include "rx/rx.h"

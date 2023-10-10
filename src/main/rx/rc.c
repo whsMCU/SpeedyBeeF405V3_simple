@@ -629,7 +629,7 @@ void updateRcCommands(void)
             } else {
                 tmp = 0;
             }
-            rcCommand[axis] = tmp;
+            rcCommand[axis] = tmp;//scaleRangef(tmp, -500, 500, -250, 250);
         } else {
             if (tmp > rcControlsConfig.yaw_deadband) {
                 tmp -= rcControlsConfig.yaw_deadband;

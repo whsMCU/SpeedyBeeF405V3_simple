@@ -33,8 +33,8 @@
 #define USE_GYRO
 #define USE_ADC
 //#define USE_GPS
-#define USE_MAG_QMC5883
-#define USE_MAG
+//#define USE_MAG_QMC5883
+//#define USE_MAG
 
 #define _USE_HW_CDC
 #define _USE_HW_USB

@@ -31,4 +31,5 @@ bool compassInit(void);
 uint32_t compassUpdate(uint32_t currentTimeUs);
 bool qmc5883lDetect(magDev_t *magDev);
 bool compassIsHealthy(void);
+void compassStartCalibration(void);
 

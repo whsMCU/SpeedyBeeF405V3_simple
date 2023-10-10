@@ -37,6 +37,7 @@
 #include "flight/mixer.h"
 #include "pg/parameter.h"
 #include "msp/msp_box.h"
+#include "rx/rc.h"
 #include "rx/rc_modes.h"
 #include "rx/rc_controls.h"
 
@@ -334,15 +335,13 @@ void hwInit(void)
 
 void init(void)
 {
-    initActiveBoxIds();
+
     imuConfig_Init();
 	rxConfig_Init();
 	rxChannelRangeConfigs_Init();
 	rxFailsafeChannelConfigs_Init();
 	statsConfig_Init();
 	armingConfig_Init();
-	initRcProcessing();
-	rcControlsConfig_Init();
 #ifdef USE_MAG_QMC5883
 	compassConfig_Init();
 #endif
@@ -354,6 +353,10 @@ void init(void)
 	batteryConfig_Init();
 	pidConfig_Init();
 
+	initRcProcessing();
+	rcControlsConfig_Init();
+	rcControlsInit();
+	initActiveBoxIds();
 
 	cliOpen(_DEF_USB, 57600);
 	bmi270_Init();
