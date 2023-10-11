@@ -78,7 +78,8 @@ void mixTable(timeUs_t currentTimeUs)
 	for (i = 0; i < 4; i++){
 		motor[i] = (rcCommand[THROTTLE] * (int16_t)currentMixer[i].THROTTLE) + ((int16_t)roll.in.pid_result * (int16_t)currentMixer[i].ROLL) + ((int16_t)pitch.in.pid_result * (int16_t)currentMixer[i].PITCH) + ((1 * (int16_t)yaw_rate.pid_result) * (int16_t)currentMixer[i].YAW);
 
-		motor[i] = lrintf((motor[i] * pulseScale) + pulseOffset);constrain(motor[i], 2250, 4500);
+		//motor[i] = lrintf((motor[i] * pulseScale) + pulseOffset);
+		//constrain(motor[i], 2250, 4500);
 	}
 
     if(Manual_Motor_flag == true){

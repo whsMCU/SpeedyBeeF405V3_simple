@@ -13,8 +13,10 @@
 #include "common/time.h"
 
 
-# define QuadP 0
-# define QuadX 1
+#define QuadP 0
+#define QuadX 1
+
+extern int16_t motor[4];
 
 
 void mixerInit(void);

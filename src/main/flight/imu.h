@@ -24,7 +24,6 @@
 #include "common/axis.h"
 #include "common/maths.h"
 
-
 // Exported symbols
 extern bool canUseGPSHeading;
 extern float accAverage[XYZ_AXIS_COUNT];

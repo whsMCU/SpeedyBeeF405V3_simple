@@ -18,7 +18,6 @@ PIDDouble roll;
 PIDDouble pitch;
 PIDSingle yaw_heading;
 PIDSingle yaw_rate;
-uint16_t motor[4];
 
 unsigned short ccr1, ccr2, ccr3, ccr4;
 

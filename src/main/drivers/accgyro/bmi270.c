@@ -614,7 +614,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     {
 		exit_callback_dt = micros() - pre_time;
 		pre_time = micros();
-		//SPI_ByteReadWrite_DMA(dev, gyro_temp->txBuf, gyro_temp->rxBuf, 14);
+		//SPI_ByteReadWrite_DMA(dev, mpu.txBuf, mpu.rxBuf, 14);
 		spiReadWriteBuf(dev, mpu.txBuf, mpu.rxBuf, 14);
     }
 }

@@ -91,11 +91,12 @@ void compassConfig_Init(void)
 
 bool compassDetect(magDev_t *magDev, sensor_align_e *alignment)
 {
+	*alignment = ALIGN_DEFAULT;  // may be overridden if target specifies MAG_*_ALIGN
     magSensor_e magHardware = MAG_NONE;
 
     if (qmc5883lDetect(magDev)) {
 
-        *alignment = MAG_QMC5883;//MAG_QMC5883L_ALIGN;
+        //*alignment = MAG_QMC5883L_ALIGN;
         magHardware = MAG_QMC5883;
     }
 
@@ -141,8 +142,8 @@ bool compassInit(void)
     #ifdef _USE_HW_CLI
     cliAdd("qmc5883l", cliQmc5883l);
     #endif
-
-    mag.magDev.magAlignment = alignment;
+    mag.magDev.magAlignment = CW270_DEG_FLIP;
+    //buildAlignmentFromStandardAlignment(&mag.mag_customAlignment, mag.mag_alignment);
 
      if (mag.mag_alignment != ALIGN_DEFAULT) {
          mag.magDev.magAlignment = mag.mag_alignment;

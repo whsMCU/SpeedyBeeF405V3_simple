@@ -261,10 +261,11 @@ int main(void)
 		  schedule_debug_temp = micros();
 //		  cliPrintf("ACC R: %4.d, P: %4.d, Y: %4.d\n\r", mpu.acc.ADCRaw[X], mpu.acc.ADCRaw[Y], mpu.acc.ADCRaw[Z]);
 //		  cliPrintf("ACC R: %4.f, P: %4.f, Y: %4.f\n\r", mpu.acc.accADCf[X], mpu.acc.accADCf[Y], mpu.acc.accADCf[Z]);
-		  //cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
-//		  cliPrintf("IMU R: %4.d, P: %4.d, Y: %4.d\n\r",    attitude.values.roll,
-//													        attitude.values.pitch,
-//													        attitude.values.yaw);
+//		  cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
+//		  cliPrintf("MAG R: %4.f, P: %4.f, Y: %4.f\n\r", mag.magADC[X], mag.magADC[Y], mag.magADC[Z]);
+		  cliPrintf("IMU R: %4.d, P: %4.d, Y: %4.d\n\r",    attitude.values.roll,
+													        attitude.values.pitch,
+													        attitude.values.yaw);
 //		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
 //		  cliPrintf("rx 1: %.1f, 2: %.1f, 3: %.1f, 4: %.1f, 5: %.1f\n\r", rcRaw[0],rcRaw[1],rcRaw[2],rcRaw[3],rcRaw[4]);
 //	  	  telemetry_tx_buf[0] = 0x46;
