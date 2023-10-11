@@ -18,6 +18,9 @@ uint8_t Manual_Motor_flag = 0;
 int16_t motor[4];
 int16_t M_motor[4];
 
+#define pulseScale 1.679999
+#define pulseOffset -1260
+
 // Custom mixer data per motor
 typedef struct motorMixer_t {
     float THROTTLE;
@@ -75,22 +78,19 @@ void mixTable(timeUs_t currentTimeUs)
 	for (i = 0; i < 4; i++){
 		motor[i] = (rcCommand[THROTTLE] * (int16_t)currentMixer[i].THROTTLE) + ((int16_t)roll.in.pid_result * (int16_t)currentMixer[i].ROLL) + ((int16_t)pitch.in.pid_result * (int16_t)currentMixer[i].PITCH) + ((1 * (int16_t)yaw_rate.pid_result) * (int16_t)currentMixer[i].YAW);
 
-		motor[i] = constrain(motor[i], 2250, 4500);
-
+		motor[i] = lrintf((motor[i] * pulseScale) + pulseOffset);constrain(motor[i], 2250, 4500);
 	}
-  if(micros() - time_manual_motor >= 500000){
-    Manual_Motor_flag = false;
-  }
-  if(Manual_Motor_flag == true){
-    TIM4->CCR1 = M_motor[0];  // Actual : REAR_L
-    TIM4->CCR2 = M_motor[1];  // Actual : FRONT_R
-    TIM4->CCR3 = M_motor[2];  // Actual : FRONT_L
-    TIM4->CCR4 = M_motor[3];  // Actual : REAR_R
-  }else{
-    TIM4->CCR1 = motor[0];  // Actual : REAR_L
-    TIM4->CCR2 = motor[1];  // Actual : FRONT_R
-    TIM4->CCR3 = motor[2];  // Actual : FRONT_L
-    TIM4->CCR4 = motor[3];  // Actual : REAR_R
+
+    if(Manual_Motor_flag == true){
+		TIM4->CCR1 = motor[0];  // Actual : REAR_L
+		TIM4->CCR2 = motor[1];  // Actual : FRONT_R
+		TIM4->CCR3 = motor[2];  // Actual : FRONT_L
+		TIM4->CCR4 = motor[3];  // Actual : REAR_R
+    }else{
+		TIM4->CCR1 = motor[0];  // Actual : REAR_L
+		TIM4->CCR2 = motor[1];  // Actual : FRONT_R
+		TIM4->CCR3 = motor[2];  // Actual : FRONT_L
+		TIM4->CCR4 = motor[3];  // Actual : REAR_R
   }
 }
 
