@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "drivers/motor.h"
+#include "drivers/pwm_output.h"
 #include "accgyro/bmi270.h"
 #include "barometer/barometer_dps310.h"
 #include "compass/compass_qmc5883l.h"
@@ -35,6 +37,7 @@
 #include "flight/pid.h"
 #include "flight/core.h"
 #include "flight/mixer.h"
+#include "flight/mixer_init.h"
 #include "pg/parameter.h"
 #include "msp/msp_box.h"
 #include "rx/rc.h"
@@ -343,6 +346,8 @@ void init(void)
 	rxFailsafeChannelConfigs_Init();
 	statsConfig_Init();
 	armingConfig_Init();
+	mixerConfig_Init();
+	motorConfig_Init();
 #ifdef USE_MAG_QMC5883
 	compassConfig_Init();
 #endif
@@ -360,6 +365,14 @@ void init(void)
 	initActiveBoxIds();
 
 	cliOpen(_DEF_USB, 57600);
+
+	uint16_t idlePulse = motorConfig.mincommand;
+
+	/* Motors needs to be initialized soon as posible because hardware initialization
+	* may send spurious pulses to esc's causing their early initialization. Also ppm
+	* receiver may share timer with motors so motors MUST be initialized here. */
+	motorDevInit(&motorConfig.dev, idlePulse, MAX_SUPPORTED_MOTORS);
+
 	bmi270_Init();
 	dps310_Init();
 #ifdef USE_MAG_QMC5883
@@ -385,7 +398,7 @@ void init(void)
 	////////////////////////////////////////
 
 	imuInit();
-	mixerInit();
+	mixerInit(mixerConfig.mixerMode);
 
 	rxInit();
 

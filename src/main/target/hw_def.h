@@ -26,7 +26,13 @@
 #define _PIN_BMI270_CS 0
 #define _PIN_SDCARD_CS 3
 #define _PIN_MAX7456_CS 4
+
+#define MAX_SUPPORTED_MOTORS 4
+
 //----------
+#define USE_MOTOR
+#define USE_PWM_OUTPUT
+
 #define USE_BARO_DPS310
 #define USE_BARO
 #define USE_ACC

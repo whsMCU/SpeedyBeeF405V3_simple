@@ -157,7 +157,6 @@ void pidUpdate(timeUs_t currentTimeUs)
 	{
 	  yaw_heading_reference = (attitude.values.yaw/10);
 	  Single_Yaw_Rate_PID_Calculation(&yaw_rate, rcCommand[YAW], mpu.gyro.gyroADC[Z]);
-	  //ccr = lrintf((value * pulseScale) + pulseOffset);
 
 	  motor[0] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
 	  motor[1] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
