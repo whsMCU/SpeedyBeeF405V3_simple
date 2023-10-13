@@ -492,6 +492,7 @@ void MainPidLoop(timeUs_t currentTimeUs)
     RcCommand(currentTimeUs);
     pidUpdate(currentTimeUs);
 	mixTable(currentTimeUs);
+	writeMotors();
 
 #if defined(USE_GPS) || defined(USE_MAG)
         updateMagHold();

@@ -261,11 +261,6 @@ static void scaleRawSetpointToFpvCamAngle(void)
     rawSetpoint[YAW]  = constrainf(yaw  * cosFactor + roll * sinFactor, -SETPOINT_RATE_LIMIT * 1.0f, SETPOINT_RATE_LIMIT * 1.0f);
 }
 
-typedef enum {
-    ANTI_GRAVITY_SMOOTH,
-    ANTI_GRAVITY_STEP
-} antiGravityMode_e;
-
 #define THROTTLE_BUFFER_MAX 20
 #define THROTTLE_DELTA_MS 100
 #define itermThrottleThreshold 250

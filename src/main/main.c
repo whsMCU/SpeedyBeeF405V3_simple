@@ -346,6 +346,7 @@ void init(void)
 	rxFailsafeChannelConfigs_Init();
 	statsConfig_Init();
 	armingConfig_Init();
+	pidProfile_Init();
 	mixerConfig_Init();
 	motorConfig_Init();
 #ifdef USE_MAG_QMC5883
@@ -365,13 +366,6 @@ void init(void)
 	initActiveBoxIds();
 
 	cliOpen(_DEF_USB, 57600);
-
-	uint16_t idlePulse = motorConfig.mincommand;
-
-	/* Motors needs to be initialized soon as posible because hardware initialization
-	* may send spurious pulses to esc's causing their early initialization. Also ppm
-	* receiver may share timer with motors so motors MUST be initialized here. */
-	motorDevInit(&motorConfig.dev, idlePulse, MAX_SUPPORTED_MOTORS);
 
 	bmi270_Init();
 	dps310_Init();
@@ -399,6 +393,13 @@ void init(void)
 
 	imuInit();
 	mixerInit(mixerConfig.mixerMode);
+
+	uint16_t idlePulse = motorConfig.mincommand;
+
+	/* Motors needs to be initialized soon as posible because hardware initialization
+	* may send spurious pulses to esc's causing their early initialization. Also ppm
+	* receiver may share timer with motors so motors MUST be initialized here. */
+	motorDevInit(&motorConfig.dev, idlePulse, getMotorCount());
 
 	rxInit();
 

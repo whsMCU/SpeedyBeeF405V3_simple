@@ -5,6 +5,7 @@
  *      Author: WANG
  */
 #include "accgyro/bmi270.h"
+#include "adc/battery.h"
 #include "flight/pid.h"
 #include "flight/imu.h"
 #include "flight/runtime_config.h"
@@ -19,6 +20,8 @@ PIDDouble pitch;
 PIDSingle yaw_heading;
 PIDSingle yaw_rate;
 
+pidAxisData_t pidData[XYZ_AXIS_COUNT];
+
 unsigned short ccr1, ccr2, ccr3, ccr4;
 
 float yaw_heading_reference;
@@ -26,6 +29,160 @@ float yaw_heading_reference;
 #define DT 0.000312f
 #define OUTER_DERIV_FILT_ENABLE 1
 #define INNER_DERIV_FILT_ENABLE 1
+
+// Full iterm suppression in setpoint mode at high-passed setpoint rate > 40deg/sec
+#define ITERM_RELAX_SETPOINT_THRESHOLD 40.0f
+#define ITERM_RELAX_CUTOFF_DEFAULT 15
+
+pidProfile_t pidProfile;
+
+void pidProfile_Init(void)
+{
+	 pidProfile.pid[PID_ROLL].P = 45;
+	 pidProfile.pid[PID_ROLL].I = 80;
+	 pidProfile.pid[PID_ROLL].D = 40;
+	 pidProfile.pid[PID_ROLL].F = 120;
+
+	 pidProfile.pid[PID_PITCH].P = 47;
+	 pidProfile.pid[PID_PITCH].I = 84;
+	 pidProfile.pid[PID_PITCH].D = 46;
+	 pidProfile.pid[PID_PITCH].F = 125;
+
+	 pidProfile.pid[PID_YAW].P = 45;
+	 pidProfile.pid[PID_YAW].I = 80;
+	 pidProfile.pid[PID_YAW].D = 0;
+	 pidProfile.pid[PID_YAW].F = 120;
+
+	 pidProfile.pid[PID_LEVEL].P = 50;
+	 pidProfile.pid[PID_LEVEL].I = 50;
+	 pidProfile.pid[PID_LEVEL].D = 75;
+	 pidProfile.pid[PID_LEVEL].F = 0;
+
+	 pidProfile.pid[PID_MAG].P = 40;
+	 pidProfile.pid[PID_MAG].I = 0;
+	 pidProfile.pid[PID_MAG].D = 0;
+	 pidProfile.pid[PID_MAG].F = 0;
+
+	 pidProfile.pidSumLimit = PIDSUM_LIMIT;
+	 pidProfile.pidSumLimitYaw = PIDSUM_LIMIT_YAW;
+	 pidProfile.yaw_lowpass_hz = 100;
+	 pidProfile.dterm_notch_hz = 0;
+	 pidProfile.dterm_notch_cutoff = 0;
+	 pidProfile.itermWindupPointPercent = 85;
+	 pidProfile.pidAtMinThrottle = PID_STABILISATION_ON;
+	 pidProfile.levelAngleLimit = 55;
+	 pidProfile.yawRateAccelLimit = 0;
+	 pidProfile.rateAccelLimit = 0;
+	 pidProfile.itermThrottleThreshold = 250;
+	 pidProfile.itermAcceleratorGain = 3500;
+	 pidProfile.crash_time = 500;          // ms
+	 pidProfile.crash_delay = 0;           // ms
+	 pidProfile.crash_recovery_angle = 10; // degrees
+	 pidProfile.crash_recovery_rate = 100; // degrees/second
+	 pidProfile.crash_dthreshold = 50;     // degrees/second/second
+	 pidProfile.crash_gthreshold = 400;    // degrees/second
+	 pidProfile.crash_setpoint_threshold = 350; // degrees/second
+	 pidProfile.crash_recovery = PID_CRASH_RECOVERY_OFF; // off by default
+	 pidProfile.horizon_tilt_effect = 75;
+	 pidProfile.horizon_tilt_expert_mode = false;
+	 pidProfile.crash_limit_yaw = 200;
+	 pidProfile.itermLimit = 400;
+	 pidProfile.throttle_boost = 5;
+	 pidProfile.throttle_boost_cutoff = 15;
+	 pidProfile.iterm_rotation = false;
+	 pidProfile.iterm_relax = ITERM_RELAX_RP;
+	 pidProfile.iterm_relax_cutoff = ITERM_RELAX_CUTOFF_DEFAULT;
+	 pidProfile.iterm_relax_type = ITERM_RELAX_SETPOINT;
+	 pidProfile.acro_trainer_angle_limit = 20;
+	 pidProfile.acro_trainer_lookahead_ms = 50;
+	 pidProfile.acro_trainer_debug_axis = FD_ROLL;
+	 pidProfile.acro_trainer_gain = 75;
+	 pidProfile.abs_control_gain = 0;
+	 pidProfile.abs_control_limit = 90;
+	 pidProfile.abs_control_error_limit = 20;
+	 pidProfile.abs_control_cutoff = 11;
+	 pidProfile.antiGravityMode = ANTI_GRAVITY_SMOOTH;
+	 pidProfile.dterm_lpf1_static_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
+		 // NOTE: dynamic lpf is enabled by default so this setting is actually
+		 // overridden and the static lowpass 1 is disabled. We can't set this
+		 // value to 0 otherwise Configurator versions 10.4 and earlier will also
+		 // reset the lowpass filter type to PT1 overriding the desired BIQUAD setting.
+	 pidProfile.dterm_lpf2_static_hz = DTERM_LPF2_HZ_DEFAULT;   // second Dterm LPF ON by default
+	 pidProfile.dterm_lpf1_type = FILTER_PT1;
+	 pidProfile.dterm_lpf2_type = FILTER_PT1;
+	 pidProfile.dterm_lpf1_dyn_min_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
+	 pidProfile.dterm_lpf1_dyn_max_hz = DTERM_LPF1_DYN_MAX_HZ_DEFAULT;
+	 pidProfile.launchControlMode = LAUNCH_CONTROL_MODE_NORMAL;
+	 pidProfile.launchControlThrottlePercent = 20;
+	 pidProfile.launchControlAngleLimit = 0;
+	 pidProfile.launchControlGain = 40;
+	 pidProfile.launchControlAllowTriggerReset = true;
+	 pidProfile.use_integrated_yaw = false;
+	 pidProfile.integrated_yaw_relax = 200;
+	 pidProfile.thrustLinearization = 0;
+
+	 pidProfile.d_min[X] = 30;
+	 pidProfile.d_min[Y] = 34;
+	 pidProfile.d_min[Z] = 0;
+
+	 pidProfile.d_min_gain = 37;
+	 pidProfile.d_min_advance = 20;
+	 pidProfile.motor_output_limit = 100;
+	 pidProfile.auto_profile_cell_count = AUTO_PROFILE_CELL_COUNT_STAY;
+	 pidProfile.transient_throttle_limit = 0;
+
+	 pidProfile.dterm_lpf1_dyn_expo = 5;
+	 pidProfile.level_race_mode = false;
+	 pidProfile.vbat_sag_compensation = 0;
+}
+
+void pidResetIterm(void)
+{
+	for (int axis = 0; axis < 3; axis++) {
+	 pidData[axis].I = 0.0f;
+	#if defined(USE_ABSOLUTE_CONTROL)
+	 axisError[axis] = 0.0f;
+	#endif
+ }
+}
+
+//void pidUpdateTpaFactor(float throttle)
+//{
+//    const float tpaBreakpoint = (currentControlRateProfile->tpa_breakpoint - 1000) / 1000.0f;
+//    float tpaRate = currentControlRateProfile->tpa_rate / 100.0f;
+//    if (throttle > tpaBreakpoint) {
+//        if (throttle < 1.0f) {
+//            tpaRate *= (throttle - tpaBreakpoint) / (1.0f - tpaBreakpoint);
+//        }
+//    } else {
+//        tpaRate = 0.0f;
+//    }
+//    pidRuntime.tpaFactor = 1.0f - tpaRate;
+//}
+//
+//void pidUpdateAntiGravityThrottleFilter(float throttle)
+//{
+//    if (pidRuntime.antiGravityMode == ANTI_GRAVITY_SMOOTH) {
+//        // calculate a boost factor for P in the same way as for I when throttle changes quickly
+//        const float antiGravityThrottleLpf = pt1FilterApply(&pidRuntime.antiGravityThrottleLpf, throttle);
+//        // focus P boost on low throttle range only
+//        if (throttle < 0.5f) {
+//            pidRuntime.antiGravityPBoost = 0.5f - throttle;
+//        } else {
+//            pidRuntime.antiGravityPBoost = 0.0f;
+//        }
+//        // use lowpass to identify start of a throttle up, use this to reduce boost at start by half
+//        if (antiGravityThrottleLpf < throttle) {
+//            pidRuntime.antiGravityPBoost *= 0.5f;
+//        }
+//        // high-passed throttle focuses boost on faster throttle changes
+//        pidRuntime.antiGravityThrottleHpf = fabsf(throttle - antiGravityThrottleLpf);
+//        pidRuntime.antiGravityPBoost = pidRuntime.antiGravityPBoost * pidRuntime.antiGravityThrottleHpf;
+//        // smooth the P boost at 3hz to remove the jagged edges and prolong the effect after throttle stops
+//        pidRuntime.antiGravityPBoost = pt1FilterApply(&pidRuntime.antiGravitySmoothLpf, pidRuntime.antiGravityPBoost);
+//    }
+//}
+
 
 void Double_Roll_Pitch_PID_Calculation(PIDDouble* axis, float set_point_angle, float angle/*BNO080 Rotation Angle*/, float rate/*ICM-20602 Angular Rate*/)
 {

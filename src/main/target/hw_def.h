@@ -27,7 +27,7 @@
 #define _PIN_SDCARD_CS 3
 #define _PIN_MAX7456_CS 4
 
-#define MAX_SUPPORTED_MOTORS 4
+#define MAX_SUPPORTED_MOTORS 8
 
 //----------
 #define USE_MOTOR

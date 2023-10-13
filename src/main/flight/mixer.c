@@ -29,33 +29,23 @@
 
 
 
-#include "config/config.h"
-#include "config/feature.h"
+#include "drivers/motor.h"
 
-//#include "drivers/dshot.h"
-//#include "drivers/io.h"
-//#include "drivers/motor.h"
+#include "flight/core.h"
+#include "rx/rc.h"
+#include "rx/rc_controls.h"
+#include "rx/rc_modes.h"
+#include "flight/runtime_config.h"
 
-#include "fc/controlrate_profile.h"
-#include "fc/core.h"
-#include "fc/rc.h"
-#include "fc/rc_controls.h"
-#include "fc/rc_modes.h"
-#include "fc/runtime_config.h"
-
-#include "flight/failsafe.h"
-//#include "flight/gps_rescue.h"
 #include "flight/imu.h"
 #include "flight/mixer_init.h"
 #include "flight/mixer.h"
-//#include "flight/mixer_tricopter.h"
 #include "flight/pid.h"
-//#include "flight/rpm_filter.h"
 
 #include "rx/rx.h"
 
-#include "sensors/battery.h"
-#include "sensors/gyro.h"
+#include "adc/battery.h"
+#include "accgyro/bmi270.h"
 
 
 #define DYN_LPF_THROTTLE_STEPS           100
@@ -131,7 +121,7 @@ static void calculateThrottleAndCurrentMotorEndpoints(timeUs_t currentTimeUs)
         const float rcCommandThrottleRange3dLow = rcCommand3dDeadBandLow - PWM_RANGE_MIN;
         const float rcCommandThrottleRange3dHigh = PWM_RANGE_MAX - rcCommand3dDeadBandHigh;
 
-        if (rcCommand[THROTTLE] <= rcCommand3dDeadBandLow || isFlipOverAfterCrashActive()) {
+        if (rcCommand[THROTTLE] <= rcCommand3dDeadBandLow) {
             // INVERTED
             motorRangeMin = mixerRuntime.motorOutputLow;
             motorRangeMax = mixerRuntime.deadbandMotor3dLow;
@@ -356,7 +346,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             motorOutput += mixerTricopterMotorCorrection(i);
         }
 #endif
-        if (failsafeIsActive()) {
+        if (false) {//failsafeIsActive()
 #ifdef USE_DSHOT
             if (isMotorProtocolDshot()) {
                 motorOutput = (motorOutput < motorRangeMin) ? mixerRuntime.disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
@@ -379,9 +369,9 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 
 static float applyThrottleLimit(float throttle)
 {
-    if (currentControlRateProfile->throttle_limit_percent < 100) {
-        const float throttleLimitFactor = currentControlRateProfile->throttle_limit_percent / 100.0f;
-        switch (currentControlRateProfile->throttle_limit_type) {
+    if (motorConfig.throttle_limit_percent < 100) {
+        const float throttleLimitFactor = motorConfig.throttle_limit_percent / 100.0f;
+        switch (motorConfig.throttle_limit_type) {
             case THROTTLE_LIMIT_TYPE_SCALE:
                 return throttle * throttleLimitFactor;
             case THROTTLE_LIMIT_TYPE_CLIP:
@@ -469,28 +459,15 @@ void mixTable(timeUs_t currentTimeUs)
     // Find min and max throttle based on conditions. Throttle has to be known before mixing
     calculateThrottleAndCurrentMotorEndpoints(currentTimeUs);
 
-    if (isFlipOverAfterCrashActive()) {
-        applyFlipOverAfterCrashModeToMotors();
-
-        return;
-    }
-
-    const bool launchControlActive = isLaunchControlActive();
-
     motorMixer_t * activeMixer = &mixerRuntime.currentMixer[0];
-#ifdef USE_LAUNCH_CONTROL
-    if (launchControlActive && (currentPidProfile->launchControlMode == LAUNCH_CONTROL_MODE_PITCHONLY)) {
-        activeMixer = &mixerRuntime.launchControlMixer[0];
-    }
-#endif
 
     // Calculate and Limit the PID sum
     const float scaledAxisPidRoll =
-        constrainf(pidData[FD_ROLL].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) / PID_MIXER_SCALING;
+        constrainf(pidData[FD_ROLL].Sum, -pidProfile.pidSumLimit, pidProfile.pidSumLimit) / PID_MIXER_SCALING;
     const float scaledAxisPidPitch =
-        constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) / PID_MIXER_SCALING;
+        constrainf(pidData[FD_PITCH].Sum, -pidProfile.pidSumLimit, pidProfile.pidSumLimit) / PID_MIXER_SCALING;
 
-    uint16_t yawPidSumLimit = currentPidProfile->pidSumLimitYaw;
+    uint16_t yawPidSumLimit = pidProfile.pidSumLimitYaw;
 
 #ifdef USE_YAW_SPIN_RECOVERY
     const bool yawSpinDetected = gyroYawSpinDetected();
@@ -507,15 +484,15 @@ void mixTable(timeUs_t currentTimeUs)
     }
 
     // Apply the throttle_limit_percent to scale or limit the throttle based on throttle_limit_type
-    if (currentControlRateProfile->throttle_limit_type != THROTTLE_LIMIT_TYPE_OFF) {
+    if (motorConfig.throttle_limit_type != THROTTLE_LIMIT_TYPE_OFF) {
         throttle = applyThrottleLimit(throttle);
     }
 
     // use scaled throttle, without dynamic idle throttle offset, as the input to antigravity
-    pidUpdateAntiGravityThrottleFilter(throttle);
+    //pidUpdateAntiGravityThrottleFilter(throttle);
 
     // and for TPA
-    pidUpdateTpaFactor(throttle);
+    //pidUpdateTpaFactor(throttle);
 
 #ifdef USE_DYN_LPF
     // keep the changes to dynamic lowpass clean, without unnecessary dynamic changes
@@ -566,30 +543,8 @@ void mixTable(timeUs_t currentTimeUs)
 
     //  The following fixed throttle values will not be shown in the blackbox log
     // ?? Should they be influenced by airmode?  If not, should go after the apply airmode code.
-    const bool airmodeEnabled = airmodeIsEnabled() || launchControlActive;
-#ifdef USE_YAW_SPIN_RECOVERY
-    // 50% throttle provides the maximum authority for yaw recovery when airmode is not active.
-    // When airmode is active the throttle setting doesn't impact recovery authority.
-    if (yawSpinDetected && !airmodeEnabled) {
-        throttle = 0.5f;
-    }
-#endif // USE_YAW_SPIN_RECOVERY
+    const bool airmodeEnabled = false;
 
-#ifdef USE_LAUNCH_CONTROL
-    // While launch control is active keep the throttle at minimum.
-    // Once the pilot triggers the launch throttle control will be reactivated.
-    if (launchControlActive) {
-        throttle = 0.0f;
-    }
-#endif
-
-#ifdef USE_GPS_RESCUE
-    // If gps rescue is active then override the throttle. This prevents things
-    // like throttle boost or throttle limit from negatively affecting the throttle.
-    if (FLIGHT_MODE(GPS_RESCUE_MODE)) {
-        throttle = gpsRescueGetThrottle();
-    }
-#endif
 
     motorMixRange = motorMixMax - motorMixMin;
     if (mixerConfig.mixer_type > MIXER_LEGACY) {
@@ -598,7 +553,7 @@ void mixTable(timeUs_t currentTimeUs)
         applyMixerAdjustment(motorMix, motorMixMin, motorMixMax, airmodeEnabled);
     }
 
-    if (featureIsEnabled(FEATURE_MOTOR_STOP)
+    if (false//featureIsEnabled(FEATURE_MOTOR_STOP)
         && ARMING_FLAG(ARMED)
         && !mixerRuntime.feature3dEnabled
         && !airmodeEnabled

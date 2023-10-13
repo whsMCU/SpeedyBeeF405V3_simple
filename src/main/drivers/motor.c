@@ -54,6 +54,9 @@ void motorConfig_Init(void)
     motorConfig.motorPoleCount = 14;   // Most brushes motors that we use are 14 poles
 
     motorConfig.motor_output_limit = 100;
+    motorConfig.throttle_limit_type = THROTTLE_LIMIT_TYPE_OFF;
+    motorConfig.throttle_limit_percent = 100;
+
 
     for (int i = 0; i < MAX_SUPPORTED_MOTORS; i++) {
         motorConfig.dev.motorOutputReordering[i] = i;

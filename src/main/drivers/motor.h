@@ -44,7 +44,16 @@ typedef struct motorConfig_s {
     uint8_t motorPoleCount;                // Magnetic poles in the motors for calculating actual RPM from eRPM provided by ESC telemetry
 
     uint8_t motor_output_limit;             // Upper limit of the motor output (percent)
+    uint8_t throttle_limit_type;            // Sets the throttle limiting type - off, scale or clip
+    uint8_t throttle_limit_percent;         // Sets the maximum pilot commanded throttle limit
 } motorConfig_t;
+
+typedef enum {
+    THROTTLE_LIMIT_TYPE_OFF = 0,
+    THROTTLE_LIMIT_TYPE_SCALE,
+    THROTTLE_LIMIT_TYPE_CLIP,
+    THROTTLE_LIMIT_TYPE_COUNT   // must be the last entry
+} throttleLimitType_e;
 
 extern motorConfig_t motorConfig;
 

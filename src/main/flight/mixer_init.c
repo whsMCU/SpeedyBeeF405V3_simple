@@ -46,7 +46,7 @@ void mixerConfig_Init(void)
 	mixerConfig.mixer_type = MIXER_LEGACY;
 }
 
-motorMixer_t customMotorMixer[8];
+motorMixer_t customMotorMixer[MAX_SUPPORTED_MOTORS];
 
 mixerMode_e currentMixerMode;
 

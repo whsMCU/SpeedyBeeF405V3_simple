@@ -24,7 +24,6 @@
 #include "flight/mixer.h"
 #include "hw.h"
 
-
 typedef struct mixerRuntime_s {
     uint8_t motorCount;
     motorMixer_t currentMixer[MAX_SUPPORTED_MOTORS];
@@ -35,7 +34,6 @@ typedef struct mixerRuntime_s {
     float disarmMotorOutput;
     float deadbandMotor3dHigh;
     float deadbandMotor3dLow;
-
 } mixerRuntime_t;
 
 extern mixerRuntime_t mixerRuntime;

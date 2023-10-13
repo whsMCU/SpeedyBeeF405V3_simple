@@ -77,7 +77,7 @@ typedef struct motorMixer_s {
     float yaw;
 } motorMixer_t;
 
-extern motorMixer_t customMotorMixer[8];
+extern motorMixer_t customMotorMixer[MAX_SUPPORTED_MOTORS];
 
 // Custom mixer configuration
 typedef struct mixer_s {
