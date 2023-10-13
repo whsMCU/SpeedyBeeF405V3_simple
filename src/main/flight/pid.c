@@ -38,102 +38,124 @@ pidProfile_t pidProfile;
 
 void pidProfile_Init(void)
 {
-	 pidProfile.pid[PID_ROLL].P = 45;
-	 pidProfile.pid[PID_ROLL].I = 80;
-	 pidProfile.pid[PID_ROLL].D = 40;
-	 pidProfile.pid[PID_ROLL].F = 120;
+	roll.in.kp = 5;
+	roll.in.ki = 5;
+	roll.in.kd = 1.7;
+	roll.out.kp = 45;
+	roll.out.ki = 3;
+	roll.out.kd = 4;
 
-	 pidProfile.pid[PID_PITCH].P = 47;
-	 pidProfile.pid[PID_PITCH].I = 84;
-	 pidProfile.pid[PID_PITCH].D = 46;
-	 pidProfile.pid[PID_PITCH].F = 125;
+	pitch.in.kp = 6.5;
+	pitch.in.ki = 5;
+	pitch.in.kd = 1.5;
+	pitch.out.kp = 45;
+	pitch.out.ki = 3;
+	pitch.out.kd = 4;
 
-	 pidProfile.pid[PID_YAW].P = 45;
-	 pidProfile.pid[PID_YAW].I = 80;
-	 pidProfile.pid[PID_YAW].D = 0;
-	 pidProfile.pid[PID_YAW].F = 120;
+	yaw_heading.kp = 50;
+	yaw_heading.ki = 0;
+	yaw_heading.kd = 20;
 
-	 pidProfile.pid[PID_LEVEL].P = 50;
-	 pidProfile.pid[PID_LEVEL].I = 50;
-	 pidProfile.pid[PID_LEVEL].D = 75;
-	 pidProfile.pid[PID_LEVEL].F = 0;
+	yaw_rate.kp = 15;
+	yaw_rate.ki = 0;
+	yaw_rate.kd = 2;
 
-	 pidProfile.pid[PID_MAG].P = 40;
-	 pidProfile.pid[PID_MAG].I = 0;
-	 pidProfile.pid[PID_MAG].D = 0;
-	 pidProfile.pid[PID_MAG].F = 0;
+	pidProfile.pid[PID_ROLL].P = 45;
+	pidProfile.pid[PID_ROLL].I = 80;
+	pidProfile.pid[PID_ROLL].D = 40;
+	pidProfile.pid[PID_ROLL].F = 120;
 
-	 pidProfile.pidSumLimit = PIDSUM_LIMIT;
-	 pidProfile.pidSumLimitYaw = PIDSUM_LIMIT_YAW;
-	 pidProfile.yaw_lowpass_hz = 100;
-	 pidProfile.dterm_notch_hz = 0;
-	 pidProfile.dterm_notch_cutoff = 0;
-	 pidProfile.itermWindupPointPercent = 85;
-	 pidProfile.pidAtMinThrottle = PID_STABILISATION_ON;
-	 pidProfile.levelAngleLimit = 55;
-	 pidProfile.yawRateAccelLimit = 0;
-	 pidProfile.rateAccelLimit = 0;
-	 pidProfile.itermThrottleThreshold = 250;
-	 pidProfile.itermAcceleratorGain = 3500;
-	 pidProfile.crash_time = 500;          // ms
-	 pidProfile.crash_delay = 0;           // ms
-	 pidProfile.crash_recovery_angle = 10; // degrees
-	 pidProfile.crash_recovery_rate = 100; // degrees/second
-	 pidProfile.crash_dthreshold = 50;     // degrees/second/second
-	 pidProfile.crash_gthreshold = 400;    // degrees/second
-	 pidProfile.crash_setpoint_threshold = 350; // degrees/second
-	 pidProfile.crash_recovery = PID_CRASH_RECOVERY_OFF; // off by default
-	 pidProfile.horizon_tilt_effect = 75;
-	 pidProfile.horizon_tilt_expert_mode = false;
-	 pidProfile.crash_limit_yaw = 200;
-	 pidProfile.itermLimit = 400;
-	 pidProfile.throttle_boost = 5;
-	 pidProfile.throttle_boost_cutoff = 15;
-	 pidProfile.iterm_rotation = false;
-	 pidProfile.iterm_relax = ITERM_RELAX_RP;
-	 pidProfile.iterm_relax_cutoff = ITERM_RELAX_CUTOFF_DEFAULT;
-	 pidProfile.iterm_relax_type = ITERM_RELAX_SETPOINT;
-	 pidProfile.acro_trainer_angle_limit = 20;
-	 pidProfile.acro_trainer_lookahead_ms = 50;
-	 pidProfile.acro_trainer_debug_axis = FD_ROLL;
-	 pidProfile.acro_trainer_gain = 75;
-	 pidProfile.abs_control_gain = 0;
-	 pidProfile.abs_control_limit = 90;
-	 pidProfile.abs_control_error_limit = 20;
-	 pidProfile.abs_control_cutoff = 11;
-	 pidProfile.antiGravityMode = ANTI_GRAVITY_SMOOTH;
-	 pidProfile.dterm_lpf1_static_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
-		 // NOTE: dynamic lpf is enabled by default so this setting is actually
-		 // overridden and the static lowpass 1 is disabled. We can't set this
-		 // value to 0 otherwise Configurator versions 10.4 and earlier will also
-		 // reset the lowpass filter type to PT1 overriding the desired BIQUAD setting.
-	 pidProfile.dterm_lpf2_static_hz = DTERM_LPF2_HZ_DEFAULT;   // second Dterm LPF ON by default
-	 pidProfile.dterm_lpf1_type = FILTER_PT1;
-	 pidProfile.dterm_lpf2_type = FILTER_PT1;
-	 pidProfile.dterm_lpf1_dyn_min_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
-	 pidProfile.dterm_lpf1_dyn_max_hz = DTERM_LPF1_DYN_MAX_HZ_DEFAULT;
-	 pidProfile.launchControlMode = LAUNCH_CONTROL_MODE_NORMAL;
-	 pidProfile.launchControlThrottlePercent = 20;
-	 pidProfile.launchControlAngleLimit = 0;
-	 pidProfile.launchControlGain = 40;
-	 pidProfile.launchControlAllowTriggerReset = true;
-	 pidProfile.use_integrated_yaw = false;
-	 pidProfile.integrated_yaw_relax = 200;
-	 pidProfile.thrustLinearization = 0;
+	pidProfile.pid[PID_PITCH].P = 47;
+	pidProfile.pid[PID_PITCH].I = 84;
+	pidProfile.pid[PID_PITCH].D = 46;
+	pidProfile.pid[PID_PITCH].F = 125;
 
-	 pidProfile.d_min[X] = 30;
-	 pidProfile.d_min[Y] = 34;
-	 pidProfile.d_min[Z] = 0;
+	pidProfile.pid[PID_YAW].P = 45;
+	pidProfile.pid[PID_YAW].I = 80;
+	pidProfile.pid[PID_YAW].D = 0;
+	pidProfile.pid[PID_YAW].F = 120;
 
-	 pidProfile.d_min_gain = 37;
-	 pidProfile.d_min_advance = 20;
-	 pidProfile.motor_output_limit = 100;
-	 pidProfile.auto_profile_cell_count = AUTO_PROFILE_CELL_COUNT_STAY;
-	 pidProfile.transient_throttle_limit = 0;
+	pidProfile.pid[PID_LEVEL].P = 50;
+	pidProfile.pid[PID_LEVEL].I = 50;
+	pidProfile.pid[PID_LEVEL].D = 75;
+	pidProfile.pid[PID_LEVEL].F = 0;
 
-	 pidProfile.dterm_lpf1_dyn_expo = 5;
-	 pidProfile.level_race_mode = false;
-	 pidProfile.vbat_sag_compensation = 0;
+	pidProfile.pid[PID_MAG].P = 40;
+	pidProfile.pid[PID_MAG].I = 0;
+	pidProfile.pid[PID_MAG].D = 0;
+	pidProfile.pid[PID_MAG].F = 0;
+
+	pidProfile.pidSumLimit = PIDSUM_LIMIT;
+	pidProfile.pidSumLimitYaw = PIDSUM_LIMIT_YAW;
+	pidProfile.yaw_lowpass_hz = 100;
+	pidProfile.dterm_notch_hz = 0;
+	pidProfile.dterm_notch_cutoff = 0;
+	pidProfile.itermWindupPointPercent = 85;
+	pidProfile.pidAtMinThrottle = PID_STABILISATION_ON;
+	pidProfile.levelAngleLimit = 55;
+	pidProfile.yawRateAccelLimit = 0;
+	pidProfile.rateAccelLimit = 0;
+	pidProfile.itermThrottleThreshold = 250;
+	pidProfile.itermAcceleratorGain = 3500;
+	pidProfile.crash_time = 500;          // ms
+	pidProfile.crash_delay = 0;           // ms
+	pidProfile.crash_recovery_angle = 10; // degrees
+	pidProfile.crash_recovery_rate = 100; // degrees/second
+	pidProfile.crash_dthreshold = 50;     // degrees/second/second
+	pidProfile.crash_gthreshold = 400;    // degrees/second
+	pidProfile.crash_setpoint_threshold = 350; // degrees/second
+	pidProfile.crash_recovery = PID_CRASH_RECOVERY_OFF; // off by default
+	pidProfile.horizon_tilt_effect = 75;
+	pidProfile.horizon_tilt_expert_mode = false;
+	pidProfile.crash_limit_yaw = 200;
+	pidProfile.itermLimit = 400;
+	pidProfile.throttle_boost = 5;
+	pidProfile.throttle_boost_cutoff = 15;
+	pidProfile.iterm_rotation = false;
+	pidProfile.iterm_relax = ITERM_RELAX_RP;
+	pidProfile.iterm_relax_cutoff = ITERM_RELAX_CUTOFF_DEFAULT;
+	pidProfile.iterm_relax_type = ITERM_RELAX_SETPOINT;
+	pidProfile.acro_trainer_angle_limit = 20;
+	pidProfile.acro_trainer_lookahead_ms = 50;
+	pidProfile.acro_trainer_debug_axis = FD_ROLL;
+	pidProfile.acro_trainer_gain = 75;
+	pidProfile.abs_control_gain = 0;
+	pidProfile.abs_control_limit = 90;
+	pidProfile.abs_control_error_limit = 20;
+	pidProfile.abs_control_cutoff = 11;
+	pidProfile.antiGravityMode = ANTI_GRAVITY_SMOOTH;
+	pidProfile.dterm_lpf1_static_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
+	 // NOTE: dynamic lpf is enabled by default so this setting is actually
+	 // overridden and the static lowpass 1 is disabled. We can't set this
+	 // value to 0 otherwise Configurator versions 10.4 and earlier will also
+	 // reset the lowpass filter type to PT1 overriding the desired BIQUAD setting.
+	pidProfile.dterm_lpf2_static_hz = DTERM_LPF2_HZ_DEFAULT;   // second Dterm LPF ON by default
+	pidProfile.dterm_lpf1_type = FILTER_PT1;
+	pidProfile.dterm_lpf2_type = FILTER_PT1;
+	pidProfile.dterm_lpf1_dyn_min_hz = DTERM_LPF1_DYN_MIN_HZ_DEFAULT;
+	pidProfile.dterm_lpf1_dyn_max_hz = DTERM_LPF1_DYN_MAX_HZ_DEFAULT;
+	pidProfile.launchControlMode = LAUNCH_CONTROL_MODE_NORMAL;
+	pidProfile.launchControlThrottlePercent = 20;
+	pidProfile.launchControlAngleLimit = 0;
+	pidProfile.launchControlGain = 40;
+	pidProfile.launchControlAllowTriggerReset = true;
+	pidProfile.use_integrated_yaw = false;
+	pidProfile.integrated_yaw_relax = 200;
+	pidProfile.thrustLinearization = 0;
+
+	pidProfile.d_min[X] = 30;
+	pidProfile.d_min[Y] = 34;
+	pidProfile.d_min[Z] = 0;
+
+	pidProfile.d_min_gain = 37;
+	pidProfile.d_min_advance = 20;
+	pidProfile.motor_output_limit = 100;
+	pidProfile.auto_profile_cell_count = AUTO_PROFILE_CELL_COUNT_STAY;
+	pidProfile.transient_throttle_limit = 0;
+
+	pidProfile.dterm_lpf1_dyn_expo = 5;
+	pidProfile.level_race_mode = false;
+	pidProfile.vbat_sag_compensation = 0;
 }
 
 void pidResetIterm(void)
@@ -314,19 +336,23 @@ void pidUpdate(timeUs_t currentTimeUs)
 	{
 	  yaw_heading_reference = (attitude.values.yaw/10);
 	  Single_Yaw_Rate_PID_Calculation(&yaw_rate, rcCommand[YAW], mpu.gyro.gyroADC[Z]);
-
-	  motor[0] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
-	  motor[1] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
-	  motor[2] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result - roll.in.pid_result - yaw_rate.pid_result;
-	  motor[3] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result - roll.in.pid_result + yaw_rate.pid_result;
+	  pidData[FD_ROLL].Sum = roll.in.pid_result;
+	  pidData[FD_PITCH].Sum = pitch.in.pid_result;
+	  pidData[FD_YAW].Sum = yaw_rate.pid_result;
+//	  motor[0] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result + roll.in.pid_result - yaw_rate.pid_result;
+//	  motor[1] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result + roll.in.pid_result + yaw_rate.pid_result;
+//	  motor[2] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result - roll.in.pid_result - yaw_rate.pid_result;
+//	  motor[3] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result - roll.in.pid_result + yaw_rate.pid_result;
 	}
 	else
 	{
 	  Single_Yaw_Heading_PID_Calculation(&yaw_heading, yaw_heading_reference, (attitude.values.yaw/10), mpu.gyro.gyroADC[Z]);
-
-	  motor[0] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result + roll.in.pid_result - yaw_heading.pid_result;
-	  motor[1] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result + roll.in.pid_result + yaw_heading.pid_result;
-	  motor[2] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result - roll.in.pid_result - yaw_heading.pid_result;
-	  motor[3] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result - roll.in.pid_result + yaw_heading.pid_result;
+	  pidData[FD_ROLL].Sum = roll.in.pid_result;
+	  pidData[FD_PITCH].Sum = pitch.in.pid_result;
+	  pidData[FD_YAW].Sum = yaw_heading.pid_result;
+//	  motor[0] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result + roll.in.pid_result - yaw_heading.pid_result;
+//	  motor[1] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result + roll.in.pid_result + yaw_heading.pid_result;
+//	  motor[2] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 + pitch.in.pid_result - roll.in.pid_result - yaw_heading.pid_result;
+//	  motor[3] = 1000 + (rcData[THROTTLE] - 1000) * 0.5 - pitch.in.pid_result - roll.in.pid_result + yaw_heading.pid_result;
 	}
 }
