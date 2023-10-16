@@ -38,27 +38,27 @@ pidProfile_t pidProfile;
 
 void pidProfile_Init(void)
 {
-	roll.in.kp = 5;
-	roll.in.ki = 5;
-	roll.in.kd = 1.7;
-	roll.out.kp = 45;
-	roll.out.ki = 3;
-	roll.out.kd = 4;
+	roll.in.kp = 0.5;
+	roll.in.ki = 0.5;
+	roll.in.kd = 0.17;
+	roll.out.kp = 4.5;
+	roll.out.ki = 0.3;
+	roll.out.kd = 0.4;
 
-	pitch.in.kp = 6.5;
-	pitch.in.ki = 5;
-	pitch.in.kd = 1.5;
-	pitch.out.kp = 45;
-	pitch.out.ki = 3;
-	pitch.out.kd = 4;
+	pitch.in.kp = 0.65;
+	pitch.in.ki = 0.5;
+	pitch.in.kd = 0.15;
+	pitch.out.kp = 4.5;
+	pitch.out.ki = 0.3;
+	pitch.out.kd = 0.4;
 
-	yaw_heading.kp = 50;
+	yaw_heading.kp = 5;
 	yaw_heading.ki = 0;
-	yaw_heading.kd = 20;
+	yaw_heading.kd = 2;
 
-	yaw_rate.kp = 15;
+	yaw_rate.kp = 1.5;
 	yaw_rate.ki = 0;
-	yaw_rate.kd = 2;
+	yaw_rate.kd = 0.2;
 
 	pidProfile.pid[PID_ROLL].P = 45;
 	pidProfile.pid[PID_ROLL].I = 80;
