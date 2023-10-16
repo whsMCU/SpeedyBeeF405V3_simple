@@ -13,6 +13,7 @@
 #include "flight/core.h"
 #include "rx/rx.h"
 #include "rx/rc_controls.h"
+#include "pg/parameter.h"
 
 
 PIDDouble roll;

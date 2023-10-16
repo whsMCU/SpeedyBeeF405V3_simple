@@ -14,28 +14,23 @@
 #include "barometer/barometer_dps310.h"
 #include "compass/compass_qmc5883l.h"
 
-void SDCARD_Page_Write(unsigned char page, unsigned char* data, unsigned char len)
+void SDCARD_Page_Write(uint32_t page, uint8_t* data, uint32_t len)
 {
-//	unsigned char devAddress = ((page*16)>>8)<<1 | 0xA0;
-//	unsigned char wordAddress = (page*16) & 0xff;
-//
-//	LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
-//	HAL_I2C_Mem_Write(&hi2c1, devAddress, wordAddress, I2C_MEMADD_SIZE_8BIT, &data[0], 16, 1);
-//	HAL_Delay(1);
-//	LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+	uint32_t sdAddress = page * 16;
+
+	sdWriteBlocks(sdAddress, data, len, 100);
 }
 
-void SDCARD_Page_Read(unsigned char page, unsigned char* data, unsigned char len)
+void SDCARD_Page_Read(uint32_t page, uint8_t* data, uint32_t len)
 {
-//	unsigned char devAddress = ((page*16)>>8)<<1 | 0xA0;
-//	unsigned char wordAddress = (page*16) & 0xff;
-//
-//	HAL_I2C_Mem_Read(&hi2c1, devAddress, wordAddress, I2C_MEMADD_SIZE_8BIT, &data[0], 16, 1);
+	uint32_t sdAddress = page * 16;
+
+	sdReadBlocks(sdAddress, (uint8_t *)data, len, 100);
 }
 
 void EP_PIDGain_Write(unsigned char id, float PGain, float IGain, float DGain)
 {
-	unsigned char buf_write[16];
+	uint8_t buf_write[16];
 	Parser parser;
 
 	buf_write[0] = 0x45;
@@ -59,7 +54,7 @@ void EP_PIDGain_Write(unsigned char id, float PGain, float IGain, float DGain)
 	buf_write[13] = parser.byte[2];
 	buf_write[14] = parser.byte[3];
 
-	unsigned char chksum = 0xff;
+	uint8_t chksum = 0xff;
 	for(int i=0;i<15;i++) chksum -= buf_write[i];
 
 	buf_write[15] = chksum;
@@ -89,7 +84,7 @@ void EP_PIDGain_Write(unsigned char id, float PGain, float IGain, float DGain)
 
 unsigned char EP_PIDGain_Read(unsigned char id, float* PGain, float* IGain, float* DGain)
 {
-	unsigned char buf_read[16];
+	uint8_t buf_read[16];
 	Parser parser;
 
 	switch(id)
@@ -114,7 +109,7 @@ unsigned char EP_PIDGain_Read(unsigned char id, float* PGain, float* IGain, floa
 		break;
 	}
 
-	unsigned char chksum = 0xff;
+	uint8_t chksum = 0xff;
 	for(int i=0;i<15;i++) chksum -= buf_read[i];
 
 	if(buf_read[15] == chksum && buf_read[0] == 0x45 && buf_read[1] == 0x50)
@@ -254,18 +249,18 @@ void pidConfig_Init(void)
 	  }
 	  else
 	  {
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 0, roll.in.kp, roll.in.ki, roll.in.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 1, roll.out.kp, roll.out.ki, roll.out.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 2, pitch.in.kp, pitch.in.ki, pitch.in.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 3, pitch.out.kp, pitch.out.ki, pitch.out.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 4, yaw_heading.kp, yaw_heading.ki, yaw_heading.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
-		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 5, yaw_rate.kp, yaw_rate.ki, yaw_rate.kd);
-		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 0, roll.in.kp, roll.in.ki, roll.in.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 1, roll.out.kp, roll.out.ki, roll.out.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 2, pitch.in.kp, pitch.in.ki, pitch.in.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 3, pitch.out.kp, pitch.out.ki, pitch.out.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 4, yaw_heading.kp, yaw_heading.ki, yaw_heading.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
+//		  Encode_Msg_PID_Gain(&telemetry_tx_buf[0], 5, yaw_rate.kp, yaw_rate.ki, yaw_rate.kd);
+//		  uartWrite(0, &telemetry_tx_buf[0], 20);
 		  printf("\nAll gains OK!\n\n");
 	  }
 }

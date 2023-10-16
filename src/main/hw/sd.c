@@ -707,7 +707,7 @@ void cliSd(cli_args_t *args)
     {
       for (int i=0; i<512/4; i++)
       {
-        cliPrintf("%d:%04d : 0x%08X\n", number, i*4, buf[i]);
+        cliPrintf("%d:%04d : 0x%08X\n\r", number, i*4, buf[i]);
       }
     }
     else

@@ -266,9 +266,9 @@ int main(void)
 //		  cliPrintf("ACC R: %4.f, P: %4.f, Y: %4.f\n\r", mpu.acc.accADCf[X], mpu.acc.accADCf[Y], mpu.acc.accADCf[Z]);
 //		  cliPrintf("GYRO R: %d, P: %d, Y: %d\n\r", mpu.gyro.ADCRaw[X], mpu.gyro.ADCRaw[Y], mpu.gyro.ADCRaw[Z]);
 //		  cliPrintf("MAG R: %4.f, P: %4.f, Y: %4.f\n\r", mag.magADC[X], mag.magADC[Y], mag.magADC[Z]);
-		  cliPrintf("IMU R: %4.d, P: %4.d, Y: %4.d\n\r",    attitude.values.roll,
-													        attitude.values.pitch,
-													        attitude.values.yaw);
+//		  cliPrintf("IMU R: %4.d, P: %4.d, Y: %4.d\n\r",    attitude.values.roll,
+//													        attitude.values.pitch,
+//													        attitude.values.yaw);
 //		  cliPrintf("BARO : %d cm \n\r", baro.BaroAlt);
 //		  cliPrintf("rx 1: %.1f, 2: %.1f, 3: %.1f, 4: %.1f, 5: %.1f\n\r", rcRaw[0],rcRaw[1],rcRaw[2],rcRaw[3],rcRaw[4]);
 //	  	  telemetry_tx_buf[0] = 0x46;
@@ -333,7 +333,7 @@ void hwInit(void)
 
   if (sdInit() == true)
   {
-    fatfsInit();
+    //fatfsInit();
   }
 }
 
@@ -347,6 +347,7 @@ void init(void)
 	statsConfig_Init();
 	armingConfig_Init();
 	pidProfile_Init();
+	//pidConfig_Init();
 	mixerConfig_Init();
 	motorConfig_Init();
 #ifdef USE_MAG_QMC5883
@@ -358,7 +359,6 @@ void init(void)
 	voltageSensorADCConfig_Init();
 	currentSensorADCConfig_Init();
 	batteryConfig_Init();
-	pidConfig_Init();
 
 	initRcProcessing();
 	rcControlsConfig_Init();
